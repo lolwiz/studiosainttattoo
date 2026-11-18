@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Saint Tattoo">
+<title>Studio Saint Tattoo – Agenda e Financeiro</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<style>
+:root{--bg:#f2f2f2;--card:#fff;--ink:#111;--mut:#6b6b6b;--line:#e0e0e0;--gold:#111;--gold2:#555;--blk:#000;
+--ok:#1f8a4c;--okbg:#e5f5ec;--bad:#c62828;--badbg:#fdeaea;--warn:#b26a00;--warnbg:#fff4dc;--pur:#6a3fb5;--purbg:#efe8fb;--r:14px}
+*{box-sizing:border-box}
+html{color-scheme:light}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);font-size:15px;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+input,select,textarea{background:#fff;border:1px solid #cfc9bd;border-radius:10px;padding:9px 10px;width:100%;font-size:16px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--gold);border-color:var(--gold)}
+label{font-size:13px;color:var(--mut);display:block;margin-bottom:4px}
+.btn{border:0;border-radius:10px;padding:10px 14px;background:var(--blk);color:#fff;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:focus-visible,.ib:focus-visible{outline:3px solid var(--gold)}
+.btn.g{background:#000;color:#fff}.btn.l{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.ok{background:var(--ok)}.btn.bad{background:var(--bad)}.btn.s{padding:6px 10px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.hid{display:none!important}
+.vazio{color:var(--mut);font-size:14px;margin:8px 0}
+.muted{color:var(--mut);font-size:13px}
+/* telas de acesso */
+.tela{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;background:radial-gradient(circle at 50% 0,#2b2b2b,#000 60%)}
+.caixa{background:#fff;border-radius:18px;padding:24px;max-width:440px;width:100%;box-shadow:0 10px 40px #0008}
+.caixa img{width:96px;height:96px;border-radius:50%;display:block;margin:0 auto 10px}
+.caixa h1{text-align:center;margin:0 0 4px;font-size:22px}.caixa p{margin:6px 0 14px}
+.caixa .f{margin-bottom:12px}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:14px;color:var(--ink);margin:10px 0}
+.chk input{width:auto;margin-top:3px}
+.erro{color:var(--bad);font-size:14px;min-height:18px;margin:6px 0}
+details.ajuda{background:#f6f6f6;border:1px solid #ddd;border-radius:10px;padding:8px 12px;margin:10px 0;font-size:13px}
+details.ajuda summary{cursor:pointer;font-weight:600}
+details.ajuda ol{padding-left:18px;margin:8px 0}
+/* topo */
+header.topo{background:var(--blk);color:#fff;position:sticky;top:0;z-index:20;padding:10px 16px calc(10px) ;padding-top:max(10px,env(safe-area-inset-top))}
+.topo .lin{display:flex;align-items:center;gap:12px;max-width:1300px;margin:0 auto}
+.topo img{width:46px;height:46px;border-radius:50%;border:1px solid #ffffff40}
+.topo h1{font-size:18px;margin:0;letter-spacing:.5px}.topo h1 small{display:block;color:#aaa;font-weight:500;font-size:12px;letter-spacing:1px}
+.topo .acoes{margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.topo .btn{background:#262626;border:1px solid #3a3a3a;padding:7px 10px;font-size:13px}
+.pill{font-size:12px;padding:5px 10px;border-radius:99px;background:#262626;border:1px solid #3a3a3a;white-space:nowrap;cursor:pointer}
+.pill.ok{color:#8be0ad}.pill.pend{color:#ffd27a}.pill.err{color:#ff9b9b}.pill.loc{color:#ccc}
+nav.abas{display:flex;gap:6px;max-width:1300px;margin:10px auto 0}
+nav.abas button{background:transparent;border:0;color:#bbb;padding:8px 12px;border-radius:10px 10px 0 0;font-weight:600;cursor:pointer}
+nav.abas button.on{background:var(--bg);color:var(--ink)}
+main{max-width:1300px;margin:0 auto;padding:16px 16px 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card h2 .dir{margin-left:auto}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:2fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.gh{grid-template-columns:1fr 1fr}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}.row>*{flex:1 1 140px}
+/* KPIs */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:14px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px}
+.kpi b{display:block;font-size:20px;margin-top:4px}.kpi>span{font-size:12px;color:var(--mut)}
+.kpi.dk{background:var(--blk);color:#fff;border-color:var(--blk)}.kpi.dk>span{color:#bbb}
+.kpi.red{background:var(--badbg);border-color:#f3b9b9;cursor:pointer}.kpi.red b{color:var(--bad)}
+/* calendário */
+.calnav{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.calnav h3{margin:0 auto;font-size:17px;text-transform:capitalize}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .dh{font-size:12px;color:var(--mut);text-align:center;padding:4px 0;font-weight:600}
+.cal .d{min-height:92px;border:1px solid var(--line);border-radius:10px;padding:4px;background:#fff;cursor:pointer;overflow:hidden;position:relative;text-align:left}
+.cal .d:hover{border-color:var(--gold)}
+.cal .d.fora{opacity:.35}
+.cal .d.hoje{box-shadow:inset 0 0 0 2px var(--gold)}
+.cal .d.verde{background:var(--okbg);border-color:#9fd6b5}
+.cal .d.verm{background:var(--badbg);border-color:#ef9a9a}
+.cal .d .n{font-weight:700;font-size:13px}
+.cal .d .tag{position:absolute;top:3px;right:4px;font-size:11px;font-weight:700}
+.cal .d.verde .tag{color:var(--ok)}.cal .d.verm .tag{color:var(--bad)}
+.cal .ev{display:block;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#efefef;border-radius:5px;padding:1px 4px;margin-top:2px}
+.cal .ev.Finalizado{background:#d7f0e0}.cal .ev.Faltou,.cal .ev.Cancelado{background:#eee;text-decoration:line-through;color:#888}
+.cal .ev.Confirmado{background:#e3ecfb}
+.cal .dots{display:none;gap:3px;flex-wrap:wrap;margin-top:4px}
+.cal .dots i{width:7px;height:7px;border-radius:50%;background:var(--gold)}
+.cal .dots i.Finalizado{background:var(--ok)}.cal .dots i.Faltou,.cal .dots i.Cancelado{background:#bbb}
+.legenda{font-size:12px;color:var(--mut);margin-top:8px}
+/* resumo semana/mês */
+.res4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.res4 div{background:#f8f8f8;border:1px solid var(--line);border-radius:10px;padding:10px}
+.res4>div>span{font-size:12px;color:var(--mut);display:block}.res4 b{font-size:17px}.res4 small{display:block;font-size:11px;color:var(--mut);margin-top:2px}
+.res4 .liq b{color:var(--ok)}
+/* linhas de atendimento */
+.at{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
+.at:last-child{border-bottom:0}
+.at .h{font-weight:700;min-width:48px}
+.at .info{flex:1;min-width:0}
+.at .info b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.at .info small{color:var(--mut);display:block;font-size:12px}
+.at.feito{opacity:.75}
+.ib{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:#fff;font-size:18px;font-weight:700;cursor:pointer;flex:none;display:inline-flex;align-items:center;justify-content:center}
+.ib.ok{color:var(--ok);border-color:#9fd6b5}.ib.bad{color:var(--bad);border-color:#ef9a9a}
+.ib.ok.on{background:var(--ok);color:#fff}.ib.bad.on{background:var(--bad);color:#fff}
+.ib:disabled{opacity:.35;cursor:not-allowed}.ib.ok.on:disabled,.ib.bad.on:disabled{opacity:1}
+.et{display:inline-block;font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:4px;vertical-align:1px}
+.et.ses{background:var(--purbg);color:var(--pur)}.et.sin{background:var(--warnbg);color:var(--warn)}
+.et.st-Finalizado{background:var(--okbg);color:var(--ok)}.et.st-Faltou,.et.st-Cancelado{background:#eee;color:#777}
+.et.st-Confirmado{background:#e3ecfb;color:#2856a3}.et.st-Pendente{background:#ededed;color:#444}
+.wa{text-decoration:none;font-size:16px}
+.conf{background:#f8f8f8;border:1px solid #ddd;border-radius:12px;padding:12px;margin:4px 0 10px}
+.conf .row>*{flex:1 1 120px}
+.calcbox{font-size:13px;margin-top:10px;background:#fff;border:1px dashed #c8c8c8;border-radius:10px;padding:8px 10px;line-height:1.7}
+.calcbox b{font-size:15px}
+/* comandas */
+.cmd{border:1px solid #ef9a9a;background:#fff7f7}
+.cmd h2{color:var(--bad)}
+.cmd .grp{font-size:13px;font-weight:700;color:var(--bad);margin-top:8px}
+/* gráficos */
+.bh{display:grid;grid-template-columns:minmax(80px,38%) 1fr auto;gap:8px;align-items:center;font-size:13px;margin:5px 0}
+.bh-l{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bh-t{background:#ececec;border-radius:6px;height:14px;overflow:hidden}.bh-t i{display:block;height:100%;background:linear-gradient(90deg,var(--gold2),var(--gold));border-radius:6px}
+.bh-v{font-weight:600;white-space:nowrap}
+.bv{display:flex;align-items:flex-end;gap:3px;height:190px;padding-top:18px;overflow-x:auto}
+.bv-c{flex:1 0 16px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:16px}
+.bv-c i{display:block;width:100%;max-width:38px;background:linear-gradient(180deg,var(--gold),var(--gold2));border-radius:5px 5px 0 0;min-height:1px}
+.bv-n{font-size:10px;color:var(--mut);margin-bottom:2px;white-space:nowrap}
+.bv-l{font-size:10px;color:var(--mut);margin-top:3px;white-space:nowrap}
+/* tabelas */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{background:var(--blk);color:#fff;text-align:left;padding:8px;font-weight:600;font-size:13px;white-space:nowrap}
+th:first-child{border-radius:8px 0 0 0}th:last-child{border-radius:0 8px 0 0}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+td.n,th.n{text-align:right;white-space:nowrap}
+tr.tot td{font-weight:700;background:#f0f0f0}
+.pos{color:var(--ok)}.neg{color:var(--bad)}
+/* oculto */
+body.oculto .v{filter:blur(7px);user-select:none}
+/* modal */
+.mf{position:fixed;inset:0;background:#0009;z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:30px 12px;overflow-y:auto}
+.mb{background:#fff;border-radius:18px;max-width:620px;width:100%;padding:18px;position:relative}
+.mb h3{margin:0 40px 12px 0;font-size:18px}
+.mx{position:absolute;top:10px;right:10px;border:0;background:#ececec;border-radius:50%;width:36px;height:36px;font-size:18px;cursor:pointer}
+.mb .f{margin-bottom:10px}
+.mb .rod{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.svl{display:flex;gap:6px;margin-bottom:6px}.svl select{flex:2}.svl input{flex:1;min-width:90px}
+.sucesso{text-align:center;padding:10px 0}.sucesso .big{font-size:46px}
+/* toast e faixa */
+#toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#222;color:#fff;padding:10px 16px;border-radius:10px;z-index:80;font-size:14px;max-width:90vw;opacity:0;transition:opacity .25s;pointer-events:none}
+#toast.on{opacity:1}
+.faixa{background:var(--warnbg);color:#6b4300;border-bottom:1px solid #f0d9a3;font-size:13px;padding:6px 16px;text-align:center}
+.fab{position:fixed;right:18px;bottom:24px;width:58px;height:58px;border-radius:50%;background:#000;color:#fff;font-size:30px;border:2px solid #fff;box-shadow:0 6px 18px #0005;z-index:30;cursor:pointer}
+nav.baixo{display:none}
+.lst-cfg .it{display:flex;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.lst-cfg .it input{flex:1}.lst-cfg .it input.val{max-width:130px}
+footer.rod{background:#000;text-align:center;padding:22px 16px 26px;margin-top:10px}
+footer.rod img{width:min(320px,80%);height:auto;display:inline-block}
+footer.rod small{display:block;color:#888;font-size:11px;margin-top:8px;letter-spacing:1px}
+.tela{flex-direction:column}.tela .marca{width:min(260px,70%);margin-top:22px;opacity:.95}
+.caixa img{background:#000}
+/* ---------- celular ---------- */
+@media (max-width:820px){
+  .g2,.g3,.gh{grid-template-columns:1fr}
+  .res4{grid-template-columns:1fr 1fr}
+  nav.abas{display:none}
+  nav.baixo{display:flex;position:fixed;bottom:0;left:0;right:0;background:var(--blk);z-index:40;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  nav.baixo button{flex:1;background:none;border:0;color:#aaa;font-size:11px;padding:4px 0;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer}
+  nav.baixo button span{font-size:20px}
+  nav.baixo button.on{color:#fff}
+  .fab{bottom:calc(78px + env(safe-area-inset-bottom))}
+  #toast{bottom:150px}
+  main{padding:12px 10px 16px}
+  footer.rod{padding-bottom:calc(96px + env(safe-area-inset-bottom))}
+  .topo img{width:36px;height:36px}.topo h1{font-size:15px;white-space:nowrap}.topo h1 small{display:none}.topo .lin{gap:8px}
+  #btAgendar{display:none}
+  .topo h1{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}.topo .acoes{flex-wrap:nowrap;gap:4px}.topo .btn{padding:7px 8px}
+  .pill{max-width:118px;overflow:hidden;text-overflow:ellipsis}
+  .topo .btn .tx{display:none}
+  .cal .d{min-height:54px;padding:3px}
+  .cal .ev{display:none}.cal .dots{display:flex}
+  .kpi b{font-size:17px}
+  .tc thead{display:none}
+  .tc tr{display:block;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;padding:6px 10px;background:#fff}
+  .tc td{display:flex;justify-content:space-between;gap:10px;border:0;padding:3px 0;text-align:right}
+  .tc td::before{content:attr(data-l);color:var(--mut);font-size:12px;text-align:left}
+  .tc td.n{text-align:right}
+  .tc tr.tot{background:#f0f0f0}
+  .mf{padding:0}.mb{border-radius:0;min-height:100%;padding-top:max(18px,env(safe-area-inset-top))}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ CONFIGURAÇÃO INICIAL ============ -->
+<section id="telaSetup" class="tela hid">
+  <form class="caixa" id="fSetup" autocomplete="off">
+    <img src="logo.png" alt="Studio Saint Tattoo">
+    <h1>Studio Saint Tattoo</h1>
+    <p class="muted" style="text-align:center">Conectar este aparelho ao GitHub (feito uma vez só)</p>
+    <div id="blocoGH">
+      <div class="f"><label for="sOwner">Usuário do GitHub</label><input id="sOwner" placeholder="ex.: studiosaint" autocapitalize="off"></div>
+      <div class="f"><label for="sRepo">Repositório dos dados (privado)</label><input id="sRepo" value="saint-dados" autocapitalize="off"></div>
+      <div class="f"><label for="sToken">Token de acesso do GitHub</label><input id="sToken" placeholder="github_pat_..." autocapitalize="off" spellcheck="false"></div>
+      <details class="ajuda"><summary>Como criar o repositório e o token?</summary>
+        <ol>
+          <li>No GitHub, crie um repositório <b>privado</b> chamado <b>saint-dados</b> (marque "Add a README").</li>
+          <li>Vá em <b>Settings → Developer settings → Personal access tokens → Fine-grained tokens → Generate new token</b>.</li>
+          <li>Em <b>Repository access</b>, escolha <b>Only select repositories</b> e marque <b>saint-dados</b>.</li>
+          <li>Em <b>Permissions → Contents</b>, escolha <b>Read and write</b>.</li>
+          <li>Escolha a validade (Expiration), gere e copie o token. Ele começa com <b>github_pat_</b>.</li>
+        </ol>
+      </details>
+    </div>
+    <label class="chk"><input type="checkbox" id="sLocal"> Usar só neste aparelho, sem sincronizar com o GitHub</label>
+    <div class="erro" id="sErro" aria-live="polite"></div>
+    <button class="btn g" style="width:100%" id="sBtn">Conectar e entrar</button>
+  </form>
+  <img class="marca" src="letra.png" alt="Saint Tattoo">
+</section>
+
+<!-- ============ LOGIN ============ -->
+<section id="telaLogin" class="tela hid">
+  <form class="caixa" id="fLogin">
+    <img src="logo.png" alt="Studio Saint Tattoo">
+    <h1>Studio Saint Tattoo</h1>
+    <p class="muted" style="text-align:center">Agenda e financeiro</p>
+    <div class="f"><label for="lSenha">Senha</label><input id="lSenha" type="password" autocomplete="current-password"></div>
+    <label class="chk"><input type="checkbox" id="lManter" checked> Manter conectado neste aparelho</label>
+    <div class="erro" id="lErro" aria-live="polite"></div>
+    <button class="btn g" style="width:100%">Entrar</button>
+  </form>
+  <img class="marca" src="letra.png" alt="Saint Tattoo">
+</section>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hid">
+  <header class="topo">
+    <div class="lin">
+      <img src="logo.png" alt="">
+      <h1>Studio Saint Tattoo<small>AGENDA E FINANCEIRO</small></h1>
+      <div class="acoes">
+        <span class="pill" id="stSync" role="status" title="Sincronização">…</span>
+        <button class="btn" type="button" id="btSync" title="Sincronizar">🔄<span class="tx"> Atualizar</span></button>
+        <button class="btn" type="button" id="btOcultar" title="Ocultar valores">🙈<span class="tx"> Ocultar valores</span></button>
+        <button class="btn" type="button" id="btSair" title="Sair">⏻<span class="tx"> Sair</span></button>
+      </div>
+    </div>
+    <nav class="abas" id="abasTopo">
+      <button type="button" data-t="agenda">📅 Agenda</button>
+      <button type="button" data-t="fin">📊 Financeiro</button>
+      <button type="button" data-t="caixa">💵 Caixa</button>
+      <button type="button" data-t="cfg">💲 Valores e taxas</button>
+    </nav>
+  </header>
+  <div class="faixa hid" id="faixaOff"></div>
+
+  <main>
+    <!-- ======= AGENDA ======= -->
+    <section id="t-agenda" class="tab">
+      <div class="card cmd hid" id="cardCmd"><h2>⚠️ Comandas em aberto – fazer o pagamento <span id="nCmd"></span></h2>
+        <p class="muted" style="margin:0">Atendimentos que já passaram e ainda não foram fechados. Toque em 💰 para registrar o pagamento ou marcar falta.</p>
+        <div id="lstCmd"></div></div>
+      <div class="grid g2">
+        <div class="card">
+          <div class="calnav">
+            <button class="btn l s" type="button" id="calAnt" aria-label="Mês anterior">◀</button>
+            <button class="btn l s" type="button" id="calHoje">Hoje</button>
+            <h3 id="calTit"></h3>
+            <button class="btn l s" type="button" id="calProx" aria-label="Próximo mês">▶</button>
+          </div>
+          <div class="cal" id="cal"></div>
+          <div class="legenda">Toque em um dia para ver os atendimentos. <b style="color:var(--ok)">Verde ✓</b> = todos concluídos · <b style="color:var(--bad)">Vermelho 💰</b> = com pendência.</div>
+          <div class="res4" id="res4"></div>
+        </div>
+        <div>
+          <div class="card"><h2>📍 Hoje <span class="muted" id="hojeTit"></span><button class="btn g s dir" type="button" id="btAgendar">➕ Agendar</button></h2><div id="lstHoje"></div></div>
+          <div class="card"><h2>⏭️ Próximo dia <span class="muted" id="proxTit"></span></h2><div id="lstProx"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======= FINANCEIRO ======= -->
+    <section id="t-fin" class="tab hid">
+      <div class="card">
+        <div class="row">
+          <div><label for="fAno">Ano</label><select id="fAno"></select></div>
+          <div><label for="fMes">Mês</label><select id="fMes"></select></div>
+          <div><label for="fForma">Pagamento</label><select id="fForma"></select></div>
+          <div><label for="fServ">Serviço</label><select id="fServ"></select></div>
+          <div><label for="fTat">Tatuador</label><select id="fTat"></select></div>
+          <div style="flex:0 0 auto"><button class="btn l" type="button" id="btCsv">⬇ CSV</button></div>
+        </div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="grid gh">
+        <div class="card"><h2 id="tGrafTempo">Faturamento líquido por dia</h2><div id="gTempo"></div></div>
+        <div class="card"><h2>Top serviços (líquido)</h2><div id="gServ"></div></div>
+        <div class="card"><h2>Formas de pagamento</h2><div id="gForma"></div></div>
+        <div class="card"><h2>Top 10 clientes</h2><div id="gCli"></div></div>
+        <div class="card"><h2>Por tatuador</h2><div id="gTat"></div></div>
+        <div class="card"><h2>Por dia da semana</h2><div id="gSem"></div></div>
+      </div>
+      <div class="card"><h2>Faturamento por mês <span class="muted" id="tAnoMes"></span></h2><div id="gMes"></div></div>
+      <div class="card"><h2>Atendimentos <span class="muted" id="nAt"></span></h2><div class="tw"><table class="tc" id="tbAt"></table></div></div>
+    </section>
+
+    <!-- ======= CAIXA ======= -->
+    <section id="t-caixa" class="tab hid">
+      <div class="kpis" id="kpisCx"></div>
+      <div class="grid gh">
+        <div class="card">
+          <h2>➕ Lançar movimento</h2>
+          <form id="fCx" autocomplete="off">
+            <input type="hidden" id="cxId">
+            <div class="row">
+              <div><label for="cxTipo">Tipo</label><select id="cxTipo"><option value="saida">Saída (despesa)</option><option value="entrada">Entrada</option><option value="ajuste">Ajuste</option></select></div>
+              <div><label for="cxData">Data</label><input type="date" id="cxData"></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div><label for="cxCat">Categoria</label><select id="cxCat"></select></div>
+              <div><label for="cxForma">Forma</label><select id="cxForma"></select></div>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <div style="flex:2 1 200px"><label for="cxDesc">Descrição</label><input id="cxDesc" placeholder="ex.: Caixa de agulhas"></div>
+              <div><label for="cxValor">Valor (R$)</label><input id="cxValor" inputmode="decimal" placeholder="0,00"></div>
+            </div>
+            <div class="erro" id="cxErro" aria-live="polite"></div>
+            <div class="row"><button class="btn g">💾 Salvar</button><button class="btn l hid" type="button" id="cxCanc">Cancelar edição</button></div>
+          </form>
+        </div>
+        <div class="card">
+          <h2>🏦 Saldo</h2>
+          <p class="muted" style="margin-top:0">O saldo atual parte do <b>saldo inicial</b> e soma tudo o que entrou e saiu a partir da data dele, incluindo os atendimentos e sinais da agenda.</p>
+          <div class="row">
+            <div><label for="sdValor">Saldo inicial (R$)</label><input id="sdValor" inputmode="decimal"></div>
+            <div><label for="sdData">A partir de</label><input type="date" id="sdData"></div>
+            <div style="flex:0 0 auto"><button class="btn l" type="button" id="sdSalvar">💾 Salvar</button></div>
+          </div>
+          <div class="calcbox" id="sdInfo"></div>
+          <div class="row" style="margin-top:10px">
+            <div><label for="sdReal">Conferência: saldo real hoje (R$)</label><input id="sdReal" inputmode="decimal" placeholder="valor contado / no banco"></div>
+            <div style="flex:0 0 auto"><button class="btn" type="button" id="sdAjustar">⚖️ Ajustar saldo</button></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Movimentos <span class="muted" id="nCx"></span>
+          <span class="dir row" style="gap:6px"><select id="cxfAno" aria-label="Ano" style="width:auto"></select><select id="cxfMes" aria-label="Mês" style="width:auto"></select></span></h2>
+        <div class="tw"><table class="tc" id="tbCx"></table></div>
+      </div>
+    </section>
+
+    <!-- ======= VALORES E TAXAS ======= -->
+    <section id="t-cfg" class="tab hid">
+      <div class="grid gh">
+        <div class="card lst-cfg"><h2>🖋️ Serviços e valores padrão</h2>
+          <p class="muted" style="margin-top:0">O valor padrão aparece ao agendar, mas pode ser mudado em cada atendimento (orçamento).</p>
+          <div id="lstServ"></div>
+          <form class="row" id="fServ2" style="margin-top:10px"><div><label for="nsNome">Novo serviço</label><input id="nsNome"></div><div><label for="nsValor">Valor padrão (R$)</label><input id="nsValor" inputmode="decimal"></div><div style="flex:0 0 auto"><button class="btn g">➕</button></div></form>
+        </div>
+        <div class="card lst-cfg"><h2>💳 Formas de pagamento e taxas da maquininha</h2>
+          <p class="muted" style="margin-top:0">A taxa (%) é descontada sozinha do valor pago. Taxas da <b>InfinitePay</b> (Visa e Mastercard, recebimento em 1 dia útil). Toque no número para editar; mudar a taxa não altera atendimentos já finalizados.</p>
+          <div class="row" style="margin-bottom:6px"><div><label for="ipFaixa">Faixa de faturamento InfinitePay</label><select id="ipFaixa"></select></div><div style="flex:0 0 auto"><button class="btn l" type="button" id="ipAplicar">Aplicar tabela</button></div></div>
+          <div class="muted" id="ipInfo" style="margin-bottom:6px"></div>
+          <div id="lstTax"></div>
+          <form class="row" id="fTax" style="margin-top:10px"><div><label for="ntNome">Nova forma</label><input id="ntNome" placeholder="ex.: Visa Crédito 3x"></div><div><label for="ntTaxa">Taxa (%)</label><input id="ntTaxa" inputmode="decimal"></div><div style="flex:0 0 auto"><button class="btn g">➕</button></div></form>
+        </div>
+        <div class="card lst-cfg"><h2>🧑‍🎨 Tatuadores</h2>
+          <div id="lstTat"></div>
+          <form class="row" id="fTat2" style="margin-top:10px"><div><label for="nTat">Novo tatuador</label><input id="nTat"></div><div style="flex:0 0 auto"><button class="btn g">➕</button></div></form>
+        </div>
+        <div class="card"><h2>☁️ Sincronização e aparelho</h2>
+          <div class="calcbox" id="infoSync"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" type="button" id="btSync2">🔄 Sincronizar agora</button>
+            <button class="btn l" type="button" id="btBackup">⬇ Baixar backup</button>
+            <label class="btn l" style="margin:0;text-align:center;color:var(--ink);font-size:15px">⬆ Importar backup<input type="file" id="inBackup" accept="application/json,.json" class="hid"></label>
+          </div>
+          <div class="row" style="margin-top:10px"><button class="btn bad" type="button" id="btDesc">Desconectar este aparelho</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer class="rod"><img src="letra.png" alt="Saint Tattoo"><small>STUDIO SAINT TATTOO · AGENDA E FINANCEIRO</small></footer>
+
+  <nav class="baixo" id="abasBaixo">
+    <button type="button" data-t="agenda"><span>📅</span>Agenda</button>
+    <button type="button" data-t="fin"><span>📊</span>Financeiro</button>
+    <button type="button" data-t="caixa"><span>💵</span>Caixa</button>
+    <button type="button" data-t="cfg"><span>💲</span>Valores</button>
+  </nav>
+  <button class="fab" type="button" id="fab" aria-label="Novo agendamento">＋</button>
+</div>
+
+<div class="mf hid" id="modal" role="dialog" aria-modal="true"><div class="mb"><button class="mx" type="button" id="mx" aria-label="Fechar">✕</button><div id="mc"></div></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
