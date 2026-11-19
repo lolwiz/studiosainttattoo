@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
-   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 7)
+   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 8)
    Tudo roda no GitHub:
    - o site fica no GitHub Pages (repositório público)
    - os dados ficam num arquivo JSON num repositório PRIVADO, gravado pela
@@ -8,9 +8,9 @@
    - sem internet, tudo fica salvo no aparelho e sincroniza depois
    - a senha de acesso fica no arquivo config.js
    ===================================================================== */
-const SITE_VERSAO = 7;
+const SITE_VERSAO = 8;
 const ARQ_DADOS = 'saint-tattoo-dados.json';
-const K = { cfg: 'sst_cfg', db: 'sst_db', sess: 'sst_sess', hide: 'sst_hide', tab: 'sst_tab' };
+const K = { cfg: 'sst_cfg', db: 'sst_db', sess: 'sst_sess', hide: 'sst_hide', tab: 'sst_tab', wa: 'sst_wa' };
 const COLS = ['ag', 'serv', 'tax', 'cx', 'cfg', 'fp', 'fm'];
 const ST_ATIVOS = ['Pendente', 'Confirmado'];
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -180,23 +180,43 @@ function textoLembrete(a, modelo) {
    Além disso o texto é copiado, para colar caso o WhatsApp não preencha. */
 const ehCelular = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 function foneWa(t) { let d = String(t || '').replace(/\D/g, ''); if (!d) return ''; if (d.length <= 11) d = '55' + d; return d; }
+/* Jeitos de abrir o WhatsApp (escolha salva em cada aparelho, pois cada um se comporta diferente) */
+const MODOS_WA = [
+  ['auto', 'Automático'],
+  ['app', 'App do WhatsApp (whatsapp://)'],
+  ['wame', 'Link wa.me'],
+  ['web', 'WhatsApp Web (navegador)'],
+  ['share', 'Compartilhar (escolher WhatsApp e o contato)']
+];
+const modoWa = () => { const m = localStorage.getItem(K.wa) || 'auto'; return m === 'auto' ? (ehCelular() ? 'app' : 'web') : m; };
+/* tira caracteres invisíveis que alguns WhatsApp não aceitam no link */
+const textoLimpo = a => textoLembrete(a).replace(/[\uFE0E\uFE0F\u200D]/g, '').replace(/\r/g, '');
 function linkLembrete(a, modo) {
   const f = foneWa(a.tel); if (!f) return '';
-  const tx = encodeURIComponent(textoLembrete(a));
-  return (modo || (ehCelular() ? 'app' : 'web')) === 'app' ? `whatsapp://send?phone=${f}&text=${tx}` : `https://api.whatsapp.com/send?phone=${f}&text=${tx}`;
+  const tx = encodeURIComponent(textoLimpo(a)), m = modo || modoWa();
+  if (m === 'app') return `whatsapp://send?phone=${f}&text=${tx}`;
+  if (m === 'wame') return `https://wa.me/${f}?text=${tx}`;
+  if (m === 'web') return `https://web.whatsapp.com/send?phone=${f}&text=${tx}`;
+  if (m === 'share') return 'share:';
+  return `https://api.whatsapp.com/send?phone=${f}&text=${tx}`;
 }
 async function copiarTexto(tx) {
   try { await navigator.clipboard.writeText(tx); return true; } catch (e) {}
   try { const ta = document.createElement('textarea'); ta.value = tx; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, tx.length); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e) { return false; }
 }
-function enviarLembrete(a) {
-  const lk = linkLembrete(a); if (!lk) return;
-  copiarTexto(textoLembrete(a)).then(ok => { if (ok) toast('📋 Mensagem copiada. Se não aparecer escrita, toque no campo do WhatsApp e escolha Colar.', 6000); });
-  if (lk.startsWith('whatsapp:')) location.href = lk; else window.open(lk, '_blank', 'noopener');
+async function enviarLembrete(a) {
+  const tx = textoLimpo(a), m = modoWa(), lk = linkLembrete(a, m); if (!lk) return;
   put('ag', { ...a, lembrete: Date.now() }); alterou();
+  if (m === 'share') {
+    if (navigator.share) { try { await navigator.share({ text: tx }); } catch (e) {} return; }
+    toast('Este aparelho não tem "Compartilhar". Escolha outro jeito em "Abrir pelo".', 5000); return;
+  }
+  copiarTexto(tx).then(ok => { if (ok) toast('📋 Mensagem copiada. Se não aparecer escrita, toque no campo do WhatsApp e escolha Colar.', 6000); });
+  if (lk.startsWith('whatsapp:')) location.href = lk; else window.open(lk, '_blank', 'noopener');
 }
 function diaLembretes() { const hj = hoje(); const p = viva('ag').filter(a => a.data > hj && ST_ATIVOS.includes(a.status)).sort(ordAg)[0]; return p ? p.data : ''; }
 function renderLembretes() {
+  const sw = $('#waModo'); if (sw && !sw.options.length) { sw.innerHTML = MODOS_WA.map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join(''); sw.value = localStorage.getItem(K.wa) || 'auto'; }
   const dia = diaLembretes(), card = $('#cardLemb');
   if (!dia) { card.classList.add('hid'); return; }
   const lst = doDia(dia).filter(a => ST_ATIVOS.includes(a.status));
@@ -1097,6 +1117,7 @@ function montarApp() {
     if (!confirm(`Aplicar as taxas da InfinitePay – ${INFINITEPAY[f].nome}?\n\nDébito, Crédito 1x a 12x são substituídos (Pix, Dinheiro e Permuta ficam 0%). Os atendimentos já finalizados NÃO mudam.`)) return;
     aplicarInfinity(f); $('#ipAplicar').blur(); alterou(); toast('💳 Taxas da InfinitePay aplicadas');
   });
+  $('#waModo').addEventListener('change', e => { localStorage.setItem(K.wa, e.target.value); toast('📲 Jeito de abrir salvo neste aparelho'); });
   $('#msgLemb').addEventListener('input', previaLemb);
   $('#msgSalvar').addEventListener('click', () => { const v = $('#msgLemb').value.trim(); if (!v) return toast('A mensagem não pode ficar vazia.'); cfgSet('msgLembrete', v); $('#msgLemb').blur(); alterou(); toast('💾 Mensagem salva'); });
   $('#msgPadrao').addEventListener('click', () => { if (!confirm('Voltar para a mensagem padrão?')) return; cfgSet('msgLembrete', MSG_PADRAO); $('#msgLemb').value = MSG_PADRAO; alterou(); toast('Mensagem padrão restaurada'); });
