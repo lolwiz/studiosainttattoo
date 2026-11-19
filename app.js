@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
-   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 6)
+   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 7)
    Tudo roda no GitHub:
    - o site fica no GitHub Pages (repositório público)
    - os dados ficam num arquivo JSON num repositório PRIVADO, gravado pela
@@ -8,7 +8,7 @@
    - sem internet, tudo fica salvo no aparelho e sincroniza depois
    - a senha de acesso fica no arquivo config.js
    ===================================================================== */
-const SITE_VERSAO = 6;
+const SITE_VERSAO = 7;
 const ARQ_DADOS = 'saint-tattoo-dados.json';
 const K = { cfg: 'sst_cfg', db: 'sst_db', sess: 'sst_sess', hide: 'sst_hide', tab: 'sst_tab' };
 const COLS = ['ag', 'serv', 'tax', 'cx', 'cfg', 'fp', 'fm'];
@@ -174,7 +174,27 @@ function textoLembrete(a, modelo) {
     sessao: a.sessao ? ` – sessão ${a.sessao}${a.totalSessoes ? ' de ' + a.totalSessoes : ''}` : '', sinal: num(a.sinal) ? R(a.sinal) : '' };
   return String(modelo ?? cfgGet('msgLembrete', MSG_PADRAO)).replace(/\{(\w+)\}/g, (m, k) => k.toLowerCase() in map ? map[k.toLowerCase()] : m);
 }
-const linkLembrete = a => { const u = telWa(a.tel); return u ? `${u}?text=${encodeURIComponent(textoLembrete(a))}` : ''; };
+/* Abre o WhatsApp com o texto já escrito.
+   Celular: abre direto o app (whatsapp://send) – é o jeito que mantém o texto no iPhone.
+   Computador: usa api.whatsapp.com/send (app ou WhatsApp Web).
+   Além disso o texto é copiado, para colar caso o WhatsApp não preencha. */
+const ehCelular = () => /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+function foneWa(t) { let d = String(t || '').replace(/\D/g, ''); if (!d) return ''; if (d.length <= 11) d = '55' + d; return d; }
+function linkLembrete(a, modo) {
+  const f = foneWa(a.tel); if (!f) return '';
+  const tx = encodeURIComponent(textoLembrete(a));
+  return (modo || (ehCelular() ? 'app' : 'web')) === 'app' ? `whatsapp://send?phone=${f}&text=${tx}` : `https://api.whatsapp.com/send?phone=${f}&text=${tx}`;
+}
+async function copiarTexto(tx) {
+  try { await navigator.clipboard.writeText(tx); return true; } catch (e) {}
+  try { const ta = document.createElement('textarea'); ta.value = tx; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, tx.length); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e) { return false; }
+}
+function enviarLembrete(a) {
+  const lk = linkLembrete(a); if (!lk) return;
+  copiarTexto(textoLembrete(a)).then(ok => { if (ok) toast('📋 Mensagem copiada. Se não aparecer escrita, toque no campo do WhatsApp e escolha Colar.', 6000); });
+  if (lk.startsWith('whatsapp:')) location.href = lk; else window.open(lk, '_blank', 'noopener');
+  put('ag', { ...a, lembrete: Date.now() }); alterou();
+}
 function diaLembretes() { const hj = hoje(); const p = viva('ag').filter(a => a.data > hj && ST_ATIVOS.includes(a.status)).sort(ordAg)[0]; return p ? p.data : ''; }
 function renderLembretes() {
   const dia = diaLembretes(), card = $('#cardLemb');
@@ -189,7 +209,7 @@ function renderLembretes() {
     const st = env ? `<span class="et okk">✅ avisado ${pad(env.getDate())}/${pad(env.getMonth() + 1)} ${pad(env.getHours())}:${pad(env.getMinutes())}</span>` : '';
     return `<div class="at" data-lid="${a.id}"><span class="h">${esc(a.hora || '--:--')}</span>
       <div class="info"><b>${esc(a.cliente)}</b><small>${esc(txtServ(a))}${a.tel ? ' · ' + esc(a.tel) : ' · <span class="neg">sem telefone</span>'} <span class="et st-${esc(a.status)}">${esc(a.status)}</span> ${st}</small></div>
-      ${lk ? `<a class="btn ${env ? 'l' : 'ok'} s" href="${esc(lk)}" target="_blank" rel="noopener" data-lw="${a.id}">📲 ${env ? 'Reenviar' : 'Enviar'}</a>` : `<button class="btn l s" type="button" data-led="${a.id}">✏️ Pôr telefone</button>`}
+      ${lk ? `<button class="btn ${env ? 'l' : 'ok'} s" type="button" data-lw="${a.id}">📲 ${env ? 'Reenviar' : 'Enviar'}</button><button class="ib" type="button" data-lcp="${a.id}" title="Copiar mensagem" aria-label="Copiar mensagem">📋</button>` : `<button class="btn l s" type="button" data-led="${a.id}">✏️ Pôr telefone</button>`}
       ${a.status === 'Pendente' ? `<button class="ib ok" type="button" data-lconf="${a.id}" title="Cliente confirmou" aria-label="Cliente confirmou">👍</button>` : ''}
     </div>`;
   }).join('');
@@ -923,7 +943,9 @@ function montarApp() {
     if (t.closest('a.wa')) return;
     if (t.closest('#t-frigo')) return;
     const lw = t.closest('[data-lw]');
-    if (lw) { const a = viva('ag').find(x => x.id === lw.dataset.lw); if (a) { put('ag', { ...a, lembrete: Date.now() }); alterou(); } return; }
+    if (lw) { const a = viva('ag').find(x => x.id === lw.dataset.lw); if (a) enviarLembrete(a); return; }
+    const lcp = t.closest('[data-lcp]');
+    if (lcp) { const a = viva('ag').find(x => x.id === lcp.dataset.lcp); if (a) copiarTexto(textoLembrete(a)).then(ok => toast(ok ? '📋 Mensagem copiada' : 'Não consegui copiar neste aparelho.')); return; }
     const lc = t.closest('[data-lconf]');
     if (lc) { const a = viva('ag').find(x => x.id === lc.dataset.lconf); if (a) { put('ag', { ...a, status: 'Confirmado' }); alterou(); toast(`👍 ${a.cliente} confirmado`); } return; }
     const led = t.closest('[data-led]'); if (led) return abrirForm(led.dataset.led);
