@@ -100,6 +100,7 @@ main{max-width:1300px;margin:0 auto;padding:16px 16px 20px}
 .at{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line)}
 .at:last-child{border-bottom:0}
 .at .h{font-weight:700;min-width:48px}
+a.btn{text-decoration:none;display:inline-block}
 .at .info{flex:1;min-width:0}
 .at .info b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .at .info small{color:var(--mut);display:block;font-size:12px}
@@ -300,6 +301,9 @@ footer.rod small{display:block;color:#888;font-size:11px;margin-top:8px;letter-s
           <div class="res4" id="res4"></div>
         </div>
         <div>
+          <div class="card hid" id="cardLemb"><h2>📲 Lembretes no WhatsApp <span class="muted" id="lembTit"></span><span class="dir" id="lembN"></span></h2>
+            <p class="muted" style="margin:0 0 4px">Toque em <b>Enviar</b>: o WhatsApp abre com a mensagem pronta, é só apertar enviar. Quando a cliente confirmar, toque em 👍.</p>
+            <div id="lstLemb"></div></div>
           <div class="card"><h2>📍 Hoje <span class="muted" id="hojeTit"></span><button class="btn g s dir" type="button" id="btAgendar">➕ Agendar</button></h2><div id="lstHoje"></div></div>
           <div class="card"><h2>⏭️ Próximo dia <span class="muted" id="proxTit"></span></h2><div id="lstProx"></div></div>
         </div>
@@ -469,6 +473,12 @@ footer.rod small{display:block;color:#888;font-size:11px;margin-top:8px;letter-s
         <div class="card lst-cfg"><h2>🧑‍🎨 Tatuadores</h2>
           <div id="lstTat"></div>
           <form class="row" id="fTat2" style="margin-top:10px"><div><label for="nTat">Novo tatuador</label><input id="nTat"></div><div style="flex:0 0 auto"><button class="btn g">➕</button></div></form>
+        </div>
+        <div class="card"><h2>📲 Mensagem de lembrete (WhatsApp)</h2>
+          <p class="muted" style="margin-top:0">Campos que são trocados sozinhos: <b>{nome}</b> (primeiro nome), <b>{nomecompleto}</b>, <b>{quando}</b> (amanhã / dia da semana), <b>{dia}</b>, <b>{data}</b>, <b>{hora}</b>, <b>{servico}</b>, <b>{tatuador}</b>, <b>{sessao}</b>, <b>{sinal}</b>. Use *texto* para negrito no WhatsApp.</p>
+          <label for="msgLemb">Mensagem</label><textarea id="msgLemb" rows="7"></textarea>
+          <label style="margin-top:8px">Prévia</label><div class="calcbox" id="msgPrev" style="white-space:pre-wrap;margin-top:0"></div>
+          <div class="row" style="margin-top:10px"><button class="btn g" type="button" id="msgSalvar">💾 Salvar mensagem</button><button class="btn l" type="button" id="msgPadrao">Voltar ao padrão</button></div>
         </div>
         <div class="card"><h2>☁️ Sincronização e aparelho</h2>
           <div class="calcbox" id="infoSync"></div>

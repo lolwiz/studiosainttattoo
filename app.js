@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
-   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 5)
+   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 6)
    Tudo roda no GitHub:
    - o site fica no GitHub Pages (repositório público)
    - os dados ficam num arquivo JSON num repositório PRIVADO, gravado pela
@@ -8,7 +8,7 @@
    - sem internet, tudo fica salvo no aparelho e sincroniza depois
    - a senha de acesso fica no arquivo config.js
    ===================================================================== */
-const SITE_VERSAO = 5;
+const SITE_VERSAO = 6;
 const ARQ_DADOS = 'saint-tattoo-dados.json';
 const K = { cfg: 'sst_cfg', db: 'sst_db', sess: 'sst_sess', hide: 'sst_hide', tab: 'sst_tab' };
 const COLS = ['ag', 'serv', 'tax', 'cx', 'cfg', 'fp', 'fm'];
@@ -162,6 +162,39 @@ function corDia(lst) {
   return '';
 }
 function telWa(t) { let d = String(t || '').replace(/\D/g, ''); if (!d) return ''; if (d.length <= 11) d = '55' + d; return `https://wa.me/${d}`; }
+
+/* ---------------- lembrete do próximo dia (WhatsApp) ---------------- */
+const MSG_PADRAO = 'Olá, {nome}! 🖤\nPassando para lembrar do seu horário no *Studio Saint Tattoo* {quando}, *{data}*, às *{hora}*.\nServiço: {servico}{sessao}\n\nPor favor, confirme respondendo esta mensagem. Até lá! ✨';
+const DIAS_EXT = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
+function textoLembrete(a, modelo) {
+  const d = pd(a.data), amanha = somaDias(hoje(), 1);
+  const quando = a.data === amanha ? 'amanhã' : a.data === hoje() ? 'hoje' : DIAS_EXT[d.getDay()];
+  const nome = String(a.cliente || '').trim().split(/\s+/)[0] || '';
+  const map = { nome, nomecompleto: a.cliente || '', quando, dia: DIAS_EXT[d.getDay()], data: `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`, hora: a.hora || '', servico: txtServ(a), tatuador: a.tatuador || '',
+    sessao: a.sessao ? ` – sessão ${a.sessao}${a.totalSessoes ? ' de ' + a.totalSessoes : ''}` : '', sinal: num(a.sinal) ? R(a.sinal) : '' };
+  return String(modelo ?? cfgGet('msgLembrete', MSG_PADRAO)).replace(/\{(\w+)\}/g, (m, k) => k.toLowerCase() in map ? map[k.toLowerCase()] : m);
+}
+const linkLembrete = a => { const u = telWa(a.tel); return u ? `${u}?text=${encodeURIComponent(textoLembrete(a))}` : ''; };
+function diaLembretes() { const hj = hoje(); const p = viva('ag').filter(a => a.data > hj && ST_ATIVOS.includes(a.status)).sort(ordAg)[0]; return p ? p.data : ''; }
+function renderLembretes() {
+  const dia = diaLembretes(), card = $('#cardLemb');
+  if (!dia) { card.classList.add('hid'); return; }
+  const lst = doDia(dia).filter(a => ST_ATIVOS.includes(a.status));
+  const falta = lst.filter(a => !a.lembrete).length;
+  card.classList.remove('hid');
+  $('#lembTit').textContent = `${dia === somaDias(hoje(), 1) ? 'Amanhã' : 'Próximo dia'} · ${brCurto(dia)}`;
+  $('#lembN').innerHTML = falta ? `<span class="et bx">${falta} a enviar</span>` : '<span class="et okk">todos avisados</span>';
+  $('#lstLemb').innerHTML = lst.map(a => {
+    const lk = linkLembrete(a), env = a.lembrete ? new Date(a.lembrete) : null;
+    const st = env ? `<span class="et okk">✅ avisado ${pad(env.getDate())}/${pad(env.getMonth() + 1)} ${pad(env.getHours())}:${pad(env.getMinutes())}</span>` : '';
+    return `<div class="at" data-lid="${a.id}"><span class="h">${esc(a.hora || '--:--')}</span>
+      <div class="info"><b>${esc(a.cliente)}</b><small>${esc(txtServ(a))}${a.tel ? ' · ' + esc(a.tel) : ' · <span class="neg">sem telefone</span>'} <span class="et st-${esc(a.status)}">${esc(a.status)}</span> ${st}</small></div>
+      ${lk ? `<a class="btn ${env ? 'l' : 'ok'} s" href="${esc(lk)}" target="_blank" rel="noopener" data-lw="${a.id}">📲 ${env ? 'Reenviar' : 'Enviar'}</a>` : `<button class="btn l s" type="button" data-led="${a.id}">✏️ Pôr telefone</button>`}
+      ${a.status === 'Pendente' ? `<button class="ib ok" type="button" data-lconf="${a.id}" title="Cliente confirmou" aria-label="Cliente confirmou">👍</button>` : ''}
+    </div>`;
+  }).join('');
+}
+
 
 /* ---------------- sincronização GitHub ---------------- */
 let CFG = lerLS(K.cfg), TOKEN = null, syncando = false, syncDeNovo = false, syncErro = '', syncT = null;
@@ -842,11 +875,17 @@ function registrarVenda() {
 /* =====================================================================
    VALORES E TAXAS
    ===================================================================== */
+function previaLemb() {
+  const ex = { cliente: 'Maria Souza', data: somaDias(hoje(), 1), hora: '14:00', servicos: [{ nome: 'Tatuagem' }], tatuador: 'Rafa', sessao: '2', totalSessoes: '3', sinal: 100 };
+  $('#msgPrev').textContent = textoLembrete(ex, $('#msgLemb').value);
+}
 function renderCfg() {
   const mq = cfgGet('maquininha', null), sel = $('#ipFaixa');
   if (sel && !sel.options.length) sel.innerHTML = Object.entries(INFINITEPAY).map(([k, v]) => `<option value="${k}">${esc(v.nome)}</option>`).join('');
   if (sel && mq && mq.faixa && document.activeElement !== sel) sel.value = mq.faixa;
   $('#ipInfo').textContent = mq ? `Tabela aplicada: InfinitePay – ${INFINITEPAY[mq.faixa]?.nome || mq.faixa}. Você pode editar qualquer taxa abaixo.` : 'A tabela da InfinitePay será aplicada na primeira sincronização.';
+  if (document.activeElement !== $('#msgLemb')) $('#msgLemb').value = cfgGet('msgLembrete', MSG_PADRAO);
+  previaLemb();
   const ativo = document.activeElement;
   if (ativo && ativo.closest && ativo.closest('#lstServ, #lstTax, #lstTat')) return;
   $('#lstServ').innerHTML = viva('serv').sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99)).map(s => `<div class="it" data-k="serv" data-id="${s.id}"><input name="nome" value="${esc(s.nome)}" aria-label="Nome"><input class="val" name="valor" inputmode="decimal" value="${nf(s.valor)}" aria-label="Valor padrão"><button class="ib bad" type="button" data-rmc aria-label="Remover">🗑</button></div>`).join('') || '<p class="vazio">Nenhum serviço.</p>';
@@ -860,7 +899,7 @@ function renderCfg() {
    ===================================================================== */
 function renderTudo(deSync) {
   if ($('#app').classList.contains('hid')) return;
-  renderAgenda(); renderFin(); renderCaixa(); renderFrigo(); renderCfg(); renderStatus();
+  renderAgenda(); renderLembretes(); renderFin(); renderCaixa(); renderFrigo(); renderCfg(); renderStatus();
   if (deSync && MODAL && MODAL.tipo === 'dia' && !$('#diaLst .conf')) abrirDia(MODAL.dia);
 }
 function montarApp() {
@@ -883,6 +922,11 @@ function montarApp() {
     const t = e.target;
     if (t.closest('a.wa')) return;
     if (t.closest('#t-frigo')) return;
+    const lw = t.closest('[data-lw]');
+    if (lw) { const a = viva('ag').find(x => x.id === lw.dataset.lw); if (a) { put('ag', { ...a, lembrete: Date.now() }); alterou(); } return; }
+    const lc = t.closest('[data-lconf]');
+    if (lc) { const a = viva('ag').find(x => x.id === lc.dataset.lconf); if (a) { put('ag', { ...a, status: 'Confirmado' }); alterou(); toast(`👍 ${a.cliente} confirmado`); } return; }
+    const led = t.closest('[data-led]'); if (led) return abrirForm(led.dataset.led);
     const novo = t.closest('[data-novo]'); if (novo) return abrirForm(null, novo.dataset.novo);
     if (t.closest('[data-ac="fechar"]')) return fecharModal();
     if (t.closest('[data-ac="fecharConf"]')) { t.closest('.confw').innerHTML = ''; return; }
@@ -1031,6 +1075,9 @@ function montarApp() {
     if (!confirm(`Aplicar as taxas da InfinitePay – ${INFINITEPAY[f].nome}?\n\nDébito, Crédito 1x a 12x são substituídos (Pix, Dinheiro e Permuta ficam 0%). Os atendimentos já finalizados NÃO mudam.`)) return;
     aplicarInfinity(f); $('#ipAplicar').blur(); alterou(); toast('💳 Taxas da InfinitePay aplicadas');
   });
+  $('#msgLemb').addEventListener('input', previaLemb);
+  $('#msgSalvar').addEventListener('click', () => { const v = $('#msgLemb').value.trim(); if (!v) return toast('A mensagem não pode ficar vazia.'); cfgSet('msgLembrete', v); $('#msgLemb').blur(); alterou(); toast('💾 Mensagem salva'); });
+  $('#msgPadrao').addEventListener('click', () => { if (!confirm('Voltar para a mensagem padrão?')) return; cfgSet('msgLembrete', MSG_PADRAO); $('#msgLemb').value = MSG_PADRAO; alterou(); toast('Mensagem padrão restaurada'); });
   const maxOrd = k => Math.max(0, ...viva(k).map(x => x.ord ?? 0)) + 1;
   $('#fServ2').addEventListener('submit', e => { e.preventDefault(); const n = $('#nsNome').value.trim(); if (!n) return; if (viva('serv').some(s => norm(s.nome) === norm(n))) return toast('Esse serviço já existe.'); put('serv', { id: uid(), nome: n, valor: r2(num($('#nsValor').value)), ord: maxOrd('serv') }); $('#nsNome').value = $('#nsValor').value = ''; $('#nsNome').blur(); alterou(); });
   $('#fTax').addEventListener('submit', e => { e.preventDefault(); const n = $('#ntNome').value.trim(); if (!n) return; if (viva('tax').some(s => norm(s.nome) === norm(n))) return toast('Essa forma já existe.'); put('tax', { id: uid(), nome: n, taxa: num($('#ntTaxa').value), ord: maxOrd('tax') }); $('#ntNome').value = $('#ntTaxa').value = ''; $('#ntNome').blur(); alterou(); });
