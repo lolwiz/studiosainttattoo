@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
-   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 8)
+   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 9)
    Tudo roda no GitHub:
    - o site fica no GitHub Pages (repositório público)
    - os dados ficam num arquivo JSON num repositório PRIVADO, gravado pela
@@ -8,7 +8,7 @@
    - sem internet, tudo fica salvo no aparelho e sincroniza depois
    - a senha de acesso fica no arquivo config.js
    ===================================================================== */
-const SITE_VERSAO = 8;
+const SITE_VERSAO = 9;
 const ARQ_DADOS = 'saint-tattoo-dados.json';
 const K = { cfg: 'sst_cfg', db: 'sst_db', sess: 'sst_sess', hide: 'sst_hide', tab: 'sst_tab', wa: 'sst_wa' };
 const COLS = ['ag', 'serv', 'tax', 'cx', 'cfg', 'fp', 'fm'];
@@ -204,15 +204,28 @@ async function copiarTexto(tx) {
   try { await navigator.clipboard.writeText(tx); return true; } catch (e) {}
   try { const ta = document.createElement('textarea'); ta.value = tx; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta); ta.select(); ta.setSelectionRange(0, tx.length); const ok = document.execCommand('copy'); ta.remove(); return ok; } catch (e) { return false; }
 }
-async function enviarLembrete(a) {
-  const tx = textoLimpo(a), m = modoWa(), lk = linkLembrete(a, m); if (!lk) return;
-  put('ag', { ...a, lembrete: Date.now() }); alterou();
-  if (m === 'share') {
-    if (navigator.share) { try { await navigator.share({ text: tx }); } catch (e) {} return; }
-    toast('Este aparelho não tem "Compartilhar". Escolha outro jeito em "Abrir pelo".', 5000); return;
-  }
-  copiarTexto(tx).then(ok => { if (ok) toast('📋 Mensagem copiada. Se não aparecer escrita, toque no campo do WhatsApp e escolha Colar.', 6000); });
-  if (lk.startsWith('whatsapp:')) location.href = lk; else window.open(lk, '_blank', 'noopener');
+/* Janela "Lembrete pronto": funciona em qualquer aparelho.
+   1) Copiar a mensagem  2) Abrir a conversa (ou Compartilhar)  3) se o WhatsApp abrir vazio, é só Colar. */
+function enviarLembrete(a) {
+  const tx = textoLimpo(a), f = foneWa(a.tel); if (!f) return;
+  const m = modoWa(), lk = linkLembrete(a, m === 'share' ? (ehCelular() ? 'wame' : 'web') : m);
+  const ext = lk.startsWith('whatsapp:') ? '' : ' target="_blank" rel="noopener"';
+  abrirModal(`<h3>📲 Lembrete para ${esc(a.cliente)}</h3>
+    <p class="muted" style="margin-top:-6px">${brCurto(a.data)} às ${esc(a.hora || '')} · ${esc(a.tel)}</p>
+    <label for="lbTx">Mensagem</label><textarea id="lbTx" rows="8" readonly>${esc(tx)}</textarea>
+    <div class="row" style="margin-top:10px">
+      <button class="btn g" type="button" id="lbCopiar">1️⃣ 📋 Copiar mensagem</button>
+      <a class="btn ok" id="lbAbrir" href="${esc(lk)}"${ext}>2️⃣ 📲 Abrir conversa</a>
+    </div>
+    ${navigator.share ? `<div class="row" style="margin-top:8px"><button class="btn l" type="button" id="lbShare">📤 Compartilhar a mensagem (escolher WhatsApp e a cliente)</button></div>` : ''}
+    <div class="calcbox">Se o WhatsApp abrir <b>sem o texto</b>: toque e segure no campo de digitar → <b>Colar</b> → enviar.</div>
+    <details class="ajuda"><summary>Ver o link (para conferência)</summary><div style="word-break:break-all;font-size:12px">${esc(lk)}</div></details>
+    <div class="rod"><button class="btn l" type="button" data-ac="fechar">Fechar</button></div>`, { tipo: 'lemb' });
+  const marcar = () => { const x = viva('ag').find(y => y.id === a.id); if (x && !x.lembrete) { put('ag', { ...x, lembrete: Date.now() }); DB.pend++; salvarDB(); agendarSync(); renderLembretes(); } };
+  const copiar = () => copiarTexto(tx).then(ok => toast(ok ? '📋 Mensagem copiada' : 'Não consegui copiar: selecione o texto e copie.', 3500));
+  $('#lbCopiar').addEventListener('click', () => { copiar(); const t = $('#lbTx'); t.focus(); t.select(); });
+  $('#lbAbrir').addEventListener('click', () => { copiarTexto(tx); marcar(); });
+  $('#lbShare')?.addEventListener('click', async () => { try { await navigator.share({ text: tx }); marcar(); } catch (e) {} });
 }
 function diaLembretes() { const hj = hoje(); const p = viva('ag').filter(a => a.data > hj && ST_ATIVOS.includes(a.status)).sort(ordAg)[0]; return p ? p.data : ''; }
 function renderLembretes() {
@@ -222,7 +235,7 @@ function renderLembretes() {
   const lst = doDia(dia).filter(a => ST_ATIVOS.includes(a.status));
   const falta = lst.filter(a => !a.lembrete).length;
   card.classList.remove('hid');
-  $('#lembTit').textContent = `${dia === somaDias(hoje(), 1) ? 'Amanhã' : 'Próximo dia'} · ${brCurto(dia)}`;
+  $('#lembTit').textContent = `${dia === somaDias(hoje(), 1) ? 'Amanhã' : 'Próximo dia'} · ${brCurto(dia)} · v${SITE_VERSAO}`;
   $('#lembN').innerHTML = falta ? `<span class="et bx">${falta} a enviar</span>` : '<span class="et okk">todos avisados</span>';
   $('#lstLemb').innerHTML = lst.map(a => {
     const lk = linkLembrete(a), env = a.lembrete ? new Date(a.lembrete) : null;

@@ -1,6 +1,6 @@
 /* Studio Saint Tattoo – modo offline.
    A cada atualização do site no GitHub, aumente o número da VERSAO abaixo. */
-const VERSAO = 'saint-v8';
+const VERSAO = 'saint-v9';
 const ARQUIVOS = ['./', 'index.html', 'app.js', 'config.js', 'manifest.json', 'logo.png', 'letra.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
