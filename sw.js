@@ -1,7 +1,7 @@
 /* Studio Saint Tattoo – modo offline.
    A cada atualização do site no GitHub, aumente o número da VERSAO abaixo. */
-const VERSAO = 'saint-v4';
-const ARQUIVOS = ['./', 'index.html', 'app.js', 'config.js', 'manifest.json', 'logo.png', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'icon-maskable-512.png', 'letra.png'];
+const VERSAO = 'saint-v5';
+const ARQUIVOS = ['./', 'index.html', 'app.js', 'config.js', 'manifest.json', 'logo.png', 'letra.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(VERSAO).then(c => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));

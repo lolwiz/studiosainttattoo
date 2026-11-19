@@ -1,16 +1,17 @@
 'use strict';
 /* =====================================================================
-   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 4)
+   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 5)
    Tudo roda no GitHub:
    - o site fica no GitHub Pages (repositório público)
    - os dados ficam num arquivo JSON num repositório PRIVADO, gravado pela
-     API do GitHub com um token guardado (criptografado) em cada aparelho
+     API do GitHub com um token guardado em cada aparelho
    - sem internet, tudo fica salvo no aparelho e sincroniza depois
+   - a senha de acesso fica no arquivo config.js
    ===================================================================== */
-const SITE_VERSAO = 4;
+const SITE_VERSAO = 5;
 const ARQ_DADOS = 'saint-tattoo-dados.json';
 const K = { cfg: 'sst_cfg', db: 'sst_db', sess: 'sst_sess', hide: 'sst_hide', tab: 'sst_tab' };
-const COLS = ['ag', 'serv', 'tax', 'cx', 'cfg'];
+const COLS = ['ag', 'serv', 'tax', 'cx', 'cfg', 'fp', 'fm'];
 const ST_ATIVOS = ['Pendente', 'Confirmado'];
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 const MES3 = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -34,6 +35,7 @@ const pad = n => String(n).padStart(2, '0');
 const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const pd = s => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, (m || 1) - 1, d || 1); };
 const hoje = () => iso(new Date());
+const agoraHM = () => new Date().toTimeString().slice(0, 5);
 const br = s => s ? String(s).split('-').reverse().join('/') : '';
 const brCurto = s => { const d = pd(s); return `${pad(d.getDate())}/${pad(d.getMonth() + 1)} (${DIAS[d.getDay()]})`; };
 const somaDias = (s, n) => { const d = pd(s); d.setDate(d.getDate() + n); return iso(d); };
@@ -51,18 +53,13 @@ async function chave(senha, salt) {
   const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
-async function cifrar(senha, texto) {
-  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
-  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await chave(senha, salt), new TextEncoder().encode(texto));
-  return { salt: u8b64(salt), iv: u8b64(iv), ct: u8b64(new Uint8Array(ct)) };
-}
 async function decifrar(senha, e) {
   const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64u8(e.iv) }, await chave(senha, b64u8(e.salt)), b64u8(e.ct));
   return new TextDecoder().decode(pt);
 }
 
 /* ---------------- dados locais ---------------- */
-const vazio = () => ({ ag: [], serv: [], tax: [], cx: [], cfg: [] });
+const vazio = () => { const o = {}; COLS.forEach(k => o[k] = []); return o; };
 function normDados(d) { const o = vazio(); if (d && typeof d === 'object') for (const k of COLS) if (Array.isArray(d[k])) o[k] = d[k].filter(r => r && r.id); return o; }
 function lerLS(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } }
 function gravarLS(k, v) { try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); return true; } catch (e) { toast('⚠️ Não consegui salvar no aparelho: ' + e.message, 5000); return false; } }
@@ -80,11 +77,32 @@ const cfgGet = (id, def) => { const r = DB.data.cfg.find(r => r.id === id && !r.
 const cfgSet = (id, v) => put('cfg', { id, v });
 
 function semear() {
-  const temSeed = id => DB.data.serv.concat(DB.data.tax).some(r => r.id === id);
+  const temSeed = (k, id) => DB.data[k].some(r => r.id === id);
   const serv = ['Tatuagem', 'Sessão fechada (diária)', 'Cover-up', 'Retoque', 'Piercing', 'Orçamento / consulta'];
-  serv.forEach((n, i) => { const id = 'serv-' + i; if (!temSeed(id)) DB.data.serv.push({ id, nome: n, valor: 0, ord: i, u: 1 }); });
+  serv.forEach((n, i) => { const id = 'serv-' + i; if (!temSeed('serv', id)) DB.data.serv.push({ id, nome: n, valor: 0, ord: i, u: 1 }); });
   const tax = ['Pix', 'Dinheiro', 'Débito', ...Array.from({ length: 12 }, (_, i) => `Crédito ${i + 1}x`), 'Permuta'];
-  tax.forEach((n, i) => { const id = 'tax-' + i; if (!temSeed(id)) DB.data.tax.push({ id, nome: n, taxa: 0, ord: i, u: 1 }); });
+  tax.forEach((n, i) => { const id = 'tax-' + i; if (!temSeed('tax', id)) DB.data.tax.push({ id, nome: n, taxa: 0, ord: i, u: 1 }); });
+  semearFrigobar(temSeed);
+}
+
+/* ---------------- frigobar: produtos do cardápio e estoque inicial ---------------- */
+const FRIGO_INI = [
+  // id, nome, preço, grátis, controla estoque, estoque inicial
+  ['fp-0', 'Coca-Cola lata', 5, false, true, 4],
+  ['fp-1', 'Coca-Cola Zero lata', 5, false, true, 2],
+  ['fp-2', 'Schweppes', 5, false, true, 3],
+  ['fp-3', 'Sol', 9, false, true, 6],
+  ['fp-4', 'Spaten', 9, false, true, 4],
+  ['fp-5', 'Heineken', 0, false, true, 10],
+  ['fp-6', 'Monster', 11, false, true, 4],
+  ['fp-7', 'Água sem gás', 0, true, true, 4],
+  ['fp-8', 'Água com gás', 0, true, true, 4],
+  ['fp-9', 'Café', 0, true, false, 0],
+  ['fp-10', 'Snack', 0, true, false, 0]
+];
+function semearFrigobar(temSeed) {
+  FRIGO_INI.forEach(([id, nome, preco, gratis, controla], i) => { if (!temSeed('fp', id)) DB.data.fp.push({ id, nome, preco, custo: 0, min: controla ? 2 : 0, gratis, controla, ord: i, u: 1 }); });
+  if (!temSeed('fm', 'fm-ini')) DB.data.fm.push({ id: 'fm-ini', tipo: 'inicial', data: hoje(), hora: '', desc: 'Estoque inicial', valor: 0, itens: FRIGO_INI.filter(p => p[5] > 0).map(p => ({ p: p[0], nome: p[1], q: p[5], v: 0 })), u: 1 });
 }
 
 /* ---------------- taxas InfinitePay (Visa e Mastercard, recebimento em 1 dia útil) ----------------
@@ -122,7 +140,7 @@ function calc(a, over = {}) {
   const taxaS = r2(sinal * txS / 100), taxaR = r2(rest * txR / 100);
   return { bruto, desc, cobrado, sinal, rest, taxaS, taxaR, taxa: r2(taxaS + taxaR), sinalLiq: r2(sinal - taxaS), restLiq: r2(rest - taxaR), liquido: r2(sinal + rest - taxaS - taxaR) };
 }
-const passou = a => `${a.data}T${a.hora || '23:59'}` <= `${hoje()}T${new Date().toTimeString().slice(0, 5)}`;
+const passou = a => `${a.data}T${a.hora || '23:59'}` <= `${hoje()}T${agoraHM()}`;
 const emAberto = a => ST_ATIVOS.includes(a.status) && passou(a);
 const sinalRetido = a => (a.status === 'Faltou' || a.status === 'Cancelado') && num(a.sinal) > 0 && !a.sinalDev;
 /* receita reconhecida na data do atendimento */
@@ -252,7 +270,7 @@ $('#sLocal').addEventListener('change', e => $('#blocoGH').classList.toggle('hid
 $('#fSetup').addEventListener('submit', async e => {
   e.preventDefault();
   const er = $('#sErro'), bt = $('#sBtn'); er.textContent = '';
-  const local = $('#sLocal').checked, owner = $('#sOwner').value.trim(), repo = $('#sRepo').value.trim(), token = $('#sToken').value.trim();
+  const local = $('#sLocal').checked, owner = $('#sOwner').value.trim().replace(/^@/, ''), repo = $('#sRepo').value.trim(), token = $('#sToken').value.trim();
   if (!local && (!owner || !repo || !token)) return er.textContent = 'Preencha usuário, repositório e token.';
   bt.disabled = true; bt.textContent = 'Verificando…';
   try {
@@ -264,7 +282,7 @@ $('#fSetup').addEventListener('submit', async e => {
       const j = await r.json();
       branch = j.default_branch || 'main';
       if (j.permissions && !j.permissions.push) throw new Error('O token só tem leitura. Em Permissions → Contents, escolha "Read and write".');
-      if (!j.private && !confirm('⚠️ Este repositório é PÚBLICO: os dados das clientes ficariam visíveis para qualquer pessoa. Recomendo torná-lo privado. Continuar mesmo assim?')) throw new Error('Torne o repositório privado em Settings → General → Danger Zone → Change visibility.');
+      if (!j.private && !confirm('⚠️ Este repositório é PÚBLICO: os dados das clientes ficariam visíveis para qualquer pessoa. Recomendo usar um repositório privado. Continuar mesmo assim?')) throw new Error('Use um repositório privado para os dados (ex.: saint-dados).');
     }
     CFG = { owner, repo, branch, local, t: local ? '' : token };
     gravarLS(K.cfg, CFG);
@@ -281,7 +299,7 @@ $('#fLogin').addEventListener('submit', async e => {
   if (dig !== SENHA) return er.textContent = 'Senha incorreta.';
   $('#lSenha').value = '';
   if ($('#lManter').checked) gravarLS(K.sess, JSON.stringify({ h: await hashSenha(SENHA) })); else localStorage.removeItem(K.sess);
-  if (CFG && CFG.enc && CFG.t == null) { // aparelho configurado na versão antiga (token protegido pela senha antiga)
+  if (CFG && CFG.enc && CFG.t == null) { // aparelho configurado numa versão antiga
     try { CFG.t = JSON.parse(await decifrar(dig, CFG.enc)).t || ''; delete CFG.enc; gravarLS(K.cfg, CFG); }
     catch (x) { toast('Informe o token de novo para concluir a atualização. Seus dados continuam guardados.', 6000); return irSetup(); }
   }
@@ -310,6 +328,7 @@ function entrar() {
 /* ---------------- navegação ---------------- */
 let ABA = localStorage.getItem(K.tab) || 'agenda';
 function irAba(t) {
+  if (!$('#t-' + t)) t = 'agenda';
   ABA = t; localStorage.setItem(K.tab, t);
   $$('.tab').forEach(s => s.classList.toggle('hid', s.id !== 't-' + t));
   $$('#abasTopo button, #abasBaixo button').forEach(b => b.classList.toggle('on', b.dataset.t === t));
@@ -366,14 +385,12 @@ function renderAgenda() {
       <span class="dots">${lst.map(a => `<i class="${esc(a.status)}"></i>`).join('')}</span></button>`;
   }
   $('#cal').innerHTML = h;
-  // comandas em aberto
   const abertas = viva('ag').filter(emAberto).sort(ordAg);
   $('#cardCmd').classList.toggle('hid', !abertas.length);
   $('#nCmd').textContent = `(${abertas.length})`;
   let lh = '', ult = '';
   for (const a of abertas) { if (a.data !== ult) { ult = a.data; lh += `<div class="grp">${brCurto(a.data)}</div>`; } lh += linhaAt(a, { pagar: true }); }
   $('#lstCmd').innerHTML = lh;
-  // resumo semana / mês
   const dHj = pd(hj), wIni = somaDias(hj, -dHj.getDay()), wFim = somaDias(wIni, 6);
   const mIni = iso(new Date(y, m, 1)), mFim = iso(new Date(y, m + 1, 0));
   const tot = (a, b) => {
@@ -388,7 +405,6 @@ function renderAgenda() {
     <div><span>Previsto da semana</span><b>${V(w.prev)}</b><small>falta receber ${V(w.falta)}</small></div>
     <div class="liq"><span>Liquidado do mês</span><b>${V(mm.liq)}</b><small>${MESES[m]}</small></div>
     <div><span>Previsto do mês</span><b>${V(mm.prev)}</b><small>falta receber ${V(mm.falta)}</small></div>`;
-  // hoje e próximo dia
   const lh2 = doDia(hj);
   $('#hojeTit').textContent = brCurto(hj);
   $('#lstHoje').innerHTML = lh2.length ? lh2.map(a => linhaAt(a)).join('') : '<p class="vazio">Nenhum atendimento hoje.</p>';
@@ -406,8 +422,9 @@ function abrirDia(dia, abrirConf) {
     <div class="rod"><button class="btn g" type="button" data-novo="${dia}">➕ Novo agendamento neste dia</button></div>`, { tipo: 'dia', dia });
   if (abrirConf) abrirConfirmacao(abrirConf);
 }
+const formasOrd = () => viva('tax').sort((x, y) => (x.ord ?? 99) - (y.ord ?? 99));
 function painelPagamento(a, modo) {
-  const c = calc(a), formas = viva('tax').sort((x, y) => (x.ord ?? 99) - (y.ord ?? 99));
+  const c = calc(a), formas = formasOrd();
   const opt = sel => formas.map(t => `<option ${t.nome === sel ? 'selected' : ''}>${esc(t.nome)}</option>`).join('');
   return `<form class="conf" data-conf="${a.id}">
     <b>${modo === 'edit' ? '✏️ Editar valores e pagamento' : '✅ Confirmar atendimento'}</b>
@@ -478,7 +495,7 @@ function abrirForm(id, dia) {
   if (a && a.status === 'Finalizado') { abrirDia(a.data); abrirConfirmacao(a.id, 'edit'); return; }
   const x = a || { data: dia || hoje(), hora: '', cliente: '', tel: '', servicos: [{ nome: viva('serv')[0]?.nome || 'Tatuagem', valor: viva('serv')[0]?.valor || 0 }], status: 'Pendente' };
   const tats = cfgGet('tatuadores', []);
-  const formas = viva('tax').sort((p, q) => (p.ord ?? 99) - (q.ord ?? 99));
+  const formas = formasOrd();
   abrirModal(`<h3>${a ? '✏️ Editar agendamento' : '➕ Novo agendamento'}</h3>
   <form id="fAg" autocomplete="off">
     <div class="row"><div><label for="agData">Data</label><input type="date" id="agData" value="${esc(x.data)}" required></div>
@@ -552,7 +569,7 @@ function abrirForm(id, dia) {
 }
 
 /* =====================================================================
-   FINANCEIRO
+   FINANCEIRO (somente estúdio – o frigobar não entra aqui)
    ===================================================================== */
 function opcoes(sel, lista, atual, todos = 'Todos') {
   const v = atual ?? sel.value;
@@ -575,7 +592,7 @@ function filtrosFin() {
   const ano = fAno.value;
   const meses = new Set(); receitas().forEach(r => { if (!ano || r.a.data.startsWith(ano)) meses.add(+r.a.data.slice(5, 7)); });
   opcoes($('#fMes'), [...meses].sort((a, b) => a - b).map(m => [String(m), MESES[m - 1]]));
-  opcoes($('#fForma'), viva('tax').sort((x, y) => (x.ord ?? 99) - (y.ord ?? 99)).map(t => t.nome));
+  opcoes($('#fForma'), formasOrd().map(t => t.nome));
   const sv = new Set(viva('serv').map(s => s.nome)); viva('ag').forEach(a => nomesServ(a).forEach(n => sv.add(n)));
   opcoes($('#fServ'), [...sv].sort());
   const tt = new Set(cfgGet('tatuadores', [])); viva('ag').forEach(a => a.tatuador && tt.add(a.tatuador));
@@ -601,7 +618,6 @@ function renderFin() {
     <div class="kpi"><span>Ticket médio (líquido)</span><b>${V(at.length ? (liq - retV) / at.length : 0)}</b></div>
     <div class="kpi"><span>🔒 Sinais retidos (faltas)</span><b>${V(retV)}</b><span>${ret.length} falta(s)</span></div>
     <div class="kpi${nAb ? ' red' : ''}" id="kpiCmd"><span>💳 Comandas em aberto</span><b>${nAb}</b></div>`;
-  // tempo
   if (mes) {
     const y = +(ano || new Date().getFullYear()), dias = new Date(y, +mes, 0).getDate(), v = Array(dias).fill(0);
     rows.forEach(r => v[+r.a.data.slice(8, 10) - 1] += r.liq);
@@ -610,7 +626,6 @@ function renderFin() {
     const v = Array(12).fill(0); doAno.forEach(r => { if (r.tipo === 'at') v[+r.a.data.slice(5, 7) - 1]++; });
     $('#tGrafTempo').textContent = 'Atendimentos por mês'; barrasV($('#gTempo'), v.map((x, i) => [MES3[i], x]), true);
   }
-  // serviços (rateio proporcional)
   const ps = {}; at.forEach(r => { const tot = r.c.bruto || 1; (r.a.servicos || []).forEach(l => { ps[l.nome] = (ps[l.nome] || 0) + r.liq * (r.c.bruto ? num(l.valor) / tot : 1 / r.a.servicos.length); }); });
   barrasH($('#gServ'), Object.entries(ps).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => [k, r2(v)]));
   const pf = {}; rows.forEach(r => { if (r.c.sinal && r.a.sinalForma) pf[r.a.sinalForma] = (pf[r.a.sinalForma] || 0) + r.c.sinalLiq; if (r.tipo === 'at' && r.c.rest > 0) pf[r.a.forma || '—'] = (pf[r.a.forma || '—'] || 0) + r.c.restLiq; });
@@ -624,7 +639,6 @@ function renderFin() {
   const pm = Array(12).fill(0); doAno.forEach(r => pm[+r.a.data.slice(5, 7) - 1] += r.liq);
   $('#tAnoMes').textContent = ano ? `(${ano})` : '(todos os anos)';
   barrasV($('#gMes'), pm.map((x, i) => [MES3[i], r2(x)]));
-  // tabela
   $('#nAt').textContent = `(${rows.length})`;
   $('#tbAt').innerHTML = rows.length ? `<thead><tr><th>Data</th><th>Cliente</th><th>Serviço(s)</th><th>Tatuador</th><th>Pagamento</th><th class="n">Valor</th><th class="n">Desconto</th><th class="n">Sinal</th><th class="n">Taxa</th><th class="n">Líquido</th></tr></thead><tbody>` +
     rows.map(r => `<tr><td data-l="Data">${br(r.a.data)}</td><td data-l="Cliente"><b>${esc(r.a.cliente)}</b></td><td data-l="Serviço(s)">${esc(txtServ(r.a))}${r.tipo === 'ret' ? ' <span class="et sin">sinal retido</span>' : ''}</td><td data-l="Tatuador">${esc(r.a.tatuador || '—')}</td>
@@ -641,7 +655,7 @@ function exportarCsv() {
 function baixar(nome, txt, tipo) { const b = new Blob([txt], { type: tipo }); const u = URL.createObjectURL(b); const l = document.createElement('a'); l.href = u; l.download = nome; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000); }
 
 /* =====================================================================
-   CAIXA
+   CAIXA (somente estúdio)
    ===================================================================== */
 function movimentos() {
   const out = [];
@@ -661,7 +675,7 @@ function renderCaixa() {
   const fA = $('#cxfAno'), fM = $('#cxfMes');
   if (!fA.dataset.ok) { fA.dataset.ok = 1; opcoes(fA, [...anos].sort((a, b) => b - a), String(new Date().getFullYear()), 'Todos os anos'); opcoes(fM, MESES.map((m, i) => [String(i + 1), m]), String(new Date().getMonth() + 1), 'Ano todo'); }
   else opcoes(fA, [...anos].sort((a, b) => b - a), null, 'Todos os anos');
-  opcoes($('#cxForma'), viva('tax').sort((x, y) => (x.ord ?? 99) - (y.ord ?? 99)).map(t => t.nome), null, '—');
+  opcoes($('#cxForma'), formasOrd().map(t => t.nome), null, '—');
   const ano = fA.value, mes = fM.value;
   const per = movs.filter(m => (!ano || m.data.startsWith(ano)) && (!mes || +m.data.slice(5, 7) === +mes));
   const ent = r2(per.filter(m => m.tipo === 'entrada').reduce((s, m) => s + m.valor, 0));
@@ -690,17 +704,153 @@ function catsCx() { const t = $('#cxTipo').value; opcoes($('#cxCat'), t === 'sai
 function limparCx() { $('#cxId').value = ''; $('#cxDesc').value = ''; $('#cxValor').value = ''; $('#cxData').value = hoje(); $('#cxCanc').classList.add('hid'); $('#cxErro').textContent = ''; }
 
 /* =====================================================================
+   FRIGOBAR – estoque e caixa próprios (separado do estúdio)
+   ===================================================================== */
+const prodOrd = () => viva('fp').sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99));
+const SINAL_FM = { inicial: 1, compra: 1, ajuste: 1, venda: -1, perda: -1 };
+function estoques() {
+  const e = {};
+  for (const m of viva('fm')) { const s = SINAL_FM[m.tipo]; if (!s) continue; for (const it of m.itens || []) e[it.p] = (e[it.p] || 0) + s * (parseInt(it.q) || 0); }
+  return e;
+}
+const liqVenda = m => r2(num(m.valor) - num(m.valor) * num(m.tx) / 100);
+function efeitoFm(m) {
+  if (m.tipo === 'venda') return liqVenda(m);
+  if (m.tipo === 'compra' || m.tipo === 'saida') return -num(m.valor);
+  if (m.tipo === 'entrada') return num(m.valor);
+  return 0;
+}
+const nomeProd = it => viva('fp').find(p => p.id === it.p)?.nome || it.nome || '?';
+const semPreco = p => !p.gratis && !num(p.preco);
+let CART = {};
+function situacao(p, q) {
+  if (!p.controla) return '<span class="et">não conta</span>';
+  if (q <= 0) return '<span class="et bx">Sem estoque</span>';
+  if (q <= num(p.min)) return '<span class="et bx">Baixo</span>';
+  return '<span class="et okk">OK</span>';
+}
+function renderCarrinho() {
+  const ids = Object.keys(CART).filter(id => CART[id] > 0);
+  const box = $('#frCart');
+  if (!ids.length) { box.innerHTML = '<p class="vazio">Toque nos produtos acima para montar a venda.</p>'; return; }
+  const est = estoques(); let tot = 0;
+  const linhas = ids.map(id => {
+    const p = viva('fp').find(x => x.id === id); if (!p) return '';
+    const q = CART[id], pr = p.gratis ? 0 : num(p.preco), sub = r2(q * pr); tot += sub;
+    const falta = p.controla && q > (est[id] || 0);
+    return `<div class="ci"><div class="nm"><b>${esc(p.nome)}</b><small>${p.gratis ? 'Grátis' : `${V(pr)} cada`}${falta ? ' · <span class="neg">⚠️ estoque: ' + (est[id] || 0) + '</span>' : ''}</small></div>
+      <button class="ib" type="button" data-cq="${id}" data-d="-1" aria-label="Menos">−</button><span class="q">${q}</span><button class="ib" type="button" data-cq="${id}" data-d="1" aria-label="Mais">+</button>
+      <b style="min-width:80px;text-align:right">${p.gratis ? 'Grátis' : V(sub)}</b></div>`;
+  }).join('');
+  tot = r2(tot);
+  const formaAtual = $('#frForma')?.value || 'Pix', cliAtual = $('#frCli')?.value || '', dtAtual = $('#frData')?.value || hoje();
+  const tx = taxaDe(formaAtual), liq = r2(tot - tot * tx / 100);
+  box.innerHTML = linhas + `<div class="tot2"><span>Total</span><span class="v">${R(tot)}</span></div>
+    <div class="row">
+      ${tot > 0 ? `<div><label for="frForma">Pagamento</label><select id="frForma">${formasOrd().map(t => `<option ${t.nome === formaAtual ? 'selected' : ''}>${esc(t.nome)}</option>`).join('')}</select></div>` : ''}
+      <div><label for="frCli">Cliente (opcional)</label><input id="frCli" list="dlCliFr" value="${esc(cliAtual)}"></div>
+      <div><label for="frData">Data</label><input type="date" id="frData" value="${esc(dtAtual)}"></div>
+    </div>
+    <datalist id="dlCliFr">${clientesConhecidos().map(c => `<option value="${esc(c.nome)}">`).join('')}</datalist>
+    ${tot > 0 && tx ? `<div class="muted" style="margin-top:6px">Taxa ${pct(tx)}% = ${V(tot - liq)} · líquido <b class="v">${R(liq)}</b></div>` : ''}
+    <div class="row" style="margin-top:10px"><button class="btn ok" type="button" id="frReg">✅ ${tot > 0 ? 'Registrar venda' : 'Registrar consumo (grátis)'}</button><button class="btn l" type="button" id="frLimpar">Limpar</button></div>`;
+}
+function renderFrigo() {
+  const est = estoques(), prods = prodOrd();
+  $('#frProds').innerHTML = prods.map(p => {
+    const q = est[p.id] || 0, cls = p.controla && q <= 0 ? ' zero' : (p.controla && q <= num(p.min) ? ' baixo' : '');
+    return `<button type="button" class="prod${cls}" data-fp="${p.id}"><b>${esc(p.nome)}</b><em>${p.gratis ? 'Grátis' : semPreco(p) ? '<span class="neg">⚠️ sem preço</span>' : V(p.preco)}</em><span>${p.controla ? `Estoque: ${q}` : '&nbsp;'}${CART[p.id] ? ` · 🛒 ${CART[p.id]}` : ''}</span></button>`;
+  }).join('') || '<p class="vazio">Nenhum produto cadastrado.</p>';
+  renderCarrinho();
+  // selects
+  const cont = prods.filter(p => p.controla).map(p => [p.id, p.nome]);
+  opcoes($('#frcProd'), cont, null, ''); opcoes($('#fraProd'), cont, null, '');
+  infoAjuste();
+  // filtros de período
+  const movs = viva('fm');
+  const anos = new Set([new Date().getFullYear()]); movs.forEach(m => m.data && anos.add(+m.data.slice(0, 4)));
+  const fA = $('#frfAno'), fM = $('#frfMes');
+  if (!fA.dataset.ok) { fA.dataset.ok = 1; opcoes(fA, [...anos].sort((a, b) => b - a), String(new Date().getFullYear()), 'Todos os anos'); opcoes(fM, MESES.map((m, i) => [String(i + 1), m]), String(new Date().getMonth() + 1), 'Ano todo'); }
+  else opcoes(fA, [...anos].sort((a, b) => b - a), null, 'Todos os anos');
+  const ano = fA.value, mes = fM.value;
+  const per = movs.filter(m => (!ano || String(m.data).startsWith(ano)) && (!mes || +String(m.data).slice(5, 7) === +mes)).sort((x, y) => (y.data + (y.hora || '')).localeCompare(x.data + (x.hora || '')));
+  // KPIs
+  const saldo = r2(movs.filter(m => m.data <= hoje()).reduce((s, m) => s + efeitoFm(m), 0));
+  const vendas = per.filter(m => m.tipo === 'venda');
+  const vBruto = r2(vendas.reduce((s, m) => s + num(m.valor), 0)), vLiq = r2(vendas.reduce((s, m) => s + liqVenda(m), 0));
+  const compras = r2(per.filter(m => m.tipo === 'compra').reduce((s, m) => s + num(m.valor), 0));
+  const outras = r2(per.filter(m => m.tipo === 'entrada' || m.tipo === 'saida').reduce((s, m) => s + efeitoFm(m), 0));
+  const res = r2(per.reduce((s, m) => s + efeitoFm(m), 0));
+  let qVend = 0, qCort = 0, custoVend = 0;
+  vendas.forEach(m => (m.itens || []).forEach(it => { const q = parseInt(it.q) || 0; if (num(it.v)) qVend += q; else qCort += q; const p = viva('fp').find(x => x.id === it.p); custoVend += q * num(p?.custo); }));
+  const nBaixo = prods.filter(p => p.controla && (est[p.id] || 0) <= num(p.min)).length;
+  $('#kpisFr').innerHTML = `
+    <div class="kpi dk"><span>🥤 Saldo do frigobar</span><b>${V(saldo)}</b></div>
+    <div class="kpi"><span>Vendas do período</span><b class="pos">${V(vBruto)}</b><span>líquido ${V(vLiq)}</span></div>
+    <div class="kpi"><span>📦 Compras / reposição</span><b class="neg">${V(compras)}</b></div>
+    <div class="kpi"><span>Outras entradas/saídas</span><b>${V(outras)}</b></div>
+    <div class="kpi"><span>Resultado do período</span><b class="${res >= 0 ? 'pos' : 'neg'}">${V(res)}</b>${custoVend ? `<span>lucro estimado ${V(vLiq - custoVend)}</span>` : ''}</div>
+    <div class="kpi"><span>Itens vendidos / cortesias</span><b>${qVend} / ${qCort}</b></div>
+    <div class="kpi${nBaixo ? ' red' : ''}"><span>⚠️ Estoque baixo</span><b>${nBaixo}</b></div>`;
+  // tabela de estoque
+  const ctrl = prods.filter(p => p.controla);
+  const totEst = ctrl.reduce((s, p) => s + Math.max(0, est[p.id] || 0), 0);
+  $('#tbEst').innerHTML = ctrl.length ? `<thead><tr><th>Produto</th><th class="n">Preço</th><th class="n">Estoque</th><th class="n">Mínimo</th><th>Situação</th><th class="n">Valor em estoque</th></tr></thead><tbody>` +
+    ctrl.map(p => { const q = est[p.id] || 0; return `<tr class="${q <= num(p.min) ? 'baixo' : ''}"><td data-l="Produto"><b>${esc(p.nome)}</b></td><td class="n" data-l="Preço">${p.gratis ? 'Grátis' : semPreco(p) ? '<span class="neg">sem preço</span>' : V(p.preco)}</td><td class="n" data-l="Estoque"><b>${q}</b></td><td class="n" data-l="Mínimo">${num(p.min)}</td><td data-l="Situação">${situacao(p, q)}</td><td class="n" data-l="Valor em estoque">${p.gratis ? '—' : V(Math.max(0, q) * num(p.preco))}</td></tr>`; }).join('') +
+    `<tr class="tot"><td data-l="">Total</td><td></td><td class="n" data-l="Unidades">${totEst}</td><td></td><td></td><td class="n" data-l="Valor">${V(ctrl.filter(p => !p.gratis).reduce((s, p) => s + Math.max(0, est[p.id] || 0) * num(p.preco), 0))}</td></tr></tbody>` : '<tbody><tr><td class="vazio">Nenhum produto com controle de estoque.</td></tr></tbody>';
+  // movimentos
+  const rot = m => ({ inicial: '📋 Estoque inicial', compra: '📦 Entrada de estoque', ajuste: '⚖️ Contagem', perda: '🗑 Perda', entrada: '⬆️ Entrada', saida: '⬇️ Saída' }[m.tipo] || (num(m.valor) ? '🛒 Venda' : '🎁 Cortesia'));
+  const itensTxt = m => (m.itens || []).map(it => `${m.tipo === 'ajuste' && it.q > 0 ? '+' : ''}${it.q}× ${esc(nomeProd(it))}`).join(', ');
+  $('#nFr').textContent = `(${per.length})`;
+  $('#tbFr').innerHTML = per.length ? `<thead><tr><th>Data</th><th>Tipo</th><th>Itens / descrição</th><th>Pagamento / cliente</th><th class="n">Valor</th><th></th></tr></thead><tbody>` +
+    per.map(m => { const ef = efeitoFm(m); return `<tr><td data-l="Data">${br(m.data)}${m.hora ? ' ' + esc(m.hora) : ''}</td><td data-l="Tipo">${rot(m)}</td><td data-l="Itens">${itensTxt(m) || ''}${m.desc && m.tipo !== 'inicial' ? (m.itens?.length ? ' · ' : '') + esc(m.desc) : ''}</td>
+      <td data-l="Pagamento">${esc([m.tipo === 'venda' && num(m.valor) ? m.forma : '', m.cliente].filter(Boolean).join(' · ') || '—')}</td>
+      <td class="n ${ef > 0 ? 'pos' : ef < 0 ? 'neg' : ''}" data-l="Valor">${ef ? `<b>${V(ef)}</b>` : '—'}${m.tipo === 'venda' && num(m.tx) ? `<br><small class="muted">bruto ${V(m.valor)}</small>` : ''}</td>
+      <td data-l=""><button class="ib bad" type="button" data-fmd="${m.id}" aria-label="Excluir">🗑</button></td></tr>`; }).join('') +
+    `<tr class="tot"><td colspan="4" data-l="">Resultado do período</td><td class="n" data-l="Valor">${V(res)}</td><td></td></tr></tbody>` : '<tbody><tr><td class="vazio">Nenhum movimento no período.</td></tr></tbody>';
+  // lista de produtos (não atrapalha quem está digitando)
+  const at = document.activeElement;
+  if (!(at && at.closest && at.closest('#lstProd'))) {
+    $('#lstProd').innerHTML = prods.map(p => `<div class="it" data-id="${p.id}">
+      <input class="nmp" name="nome" value="${esc(p.nome)}" aria-label="Produto">
+      <input name="preco" inputmode="decimal" value="${nf(p.preco)}" aria-label="Preço" ${p.gratis ? 'disabled' : ''}>
+      <input name="custo" inputmode="decimal" value="${nf(p.custo)}" aria-label="Custo unitário">
+      <input name="min" inputmode="numeric" value="${num(p.min)}" aria-label="Estoque mínimo" ${p.controla ? '' : 'disabled'}>
+      <label><input type="checkbox" name="gratis" ${p.gratis ? 'checked' : ''}> grátis</label>
+      <label title="Controlar estoque"><input type="checkbox" name="controla" ${p.controla ? 'checked' : ''}> ${p.controla ? (est[p.id] || 0) + ' un' : 'não conta'}</label>
+      <button class="ib bad" type="button" data-fpd="${p.id}" aria-label="Remover">🗑</button></div>`).join('');
+  }
+}
+function infoAjuste() {
+  const id = $('#fraProd').value, est = estoques(), cont = $('#fraTipo').value === 'cont';
+  $('#fraLbl').textContent = cont ? 'Quantidade contada' : 'Quantidade perdida';
+  $('#fraInfo').textContent = id ? `No sistema: ${est[id] || 0} un.` + (cont ? ' Digite quantas tem de verdade; a diferença é ajustada.' : '') : '';
+}
+function registrarVenda() {
+  const ids = Object.keys(CART).filter(id => CART[id] > 0); if (!ids.length) return;
+  const est = estoques();
+  const itens = ids.map(id => { const p = viva('fp').find(x => x.id === id); return p && { p: id, nome: p.nome, q: CART[id], v: p.gratis ? 0 : r2(num(p.preco)) }; }).filter(Boolean);
+  const falta = itens.filter(it => { const p = viva('fp').find(x => x.id === it.p); return p.controla && it.q > (est[it.p] || 0); });
+  if (falta.length && !confirm(`O estoque no sistema não cobre: ${falta.map(it => `${it.nome} (tem ${est[it.p] || 0})`).join(', ')}.\n\nRegistrar mesmo assim? (o estoque ficará negativo até você lançar a entrada ou a contagem)`)) return;
+  const valor = r2(itens.reduce((s, it) => s + it.q * it.v, 0));
+  const forma = valor > 0 ? ($('#frForma')?.value || 'Pix') : '';
+  put('fm', { id: uid(), tipo: 'venda', data: $('#frData')?.value || hoje(), hora: agoraHM(), itens, valor, forma, tx: valor > 0 ? taxaDe(forma) : 0, cliente: ($('#frCli')?.value || '').trim() });
+  CART = {}; alterou();
+  toast(valor > 0 ? `✅ Venda de ${R(valor)} registrada` : '✅ Consumo registrado');
+}
+
+/* =====================================================================
    VALORES E TAXAS
    ===================================================================== */
 function renderCfg() {
-  const ativo = document.activeElement;
-  if (ativo && ativo.closest && ativo.closest('#lstServ, #lstTax, #lstTat')) return; // não atrapalha quem está digitando
-  $('#lstServ').innerHTML = viva('serv').sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99)).map(s => `<div class="it" data-k="serv" data-id="${s.id}"><input name="nome" value="${esc(s.nome)}" aria-label="Nome"><input class="val" name="valor" inputmode="decimal" value="${nf(s.valor)}" aria-label="Valor padrão"><button class="ib bad" type="button" data-rmc aria-label="Remover">🗑</button></div>`).join('') || '<p class="vazio">Nenhum serviço.</p>';
-  $('#lstTax').innerHTML = viva('tax').sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99)).map(t => `<div class="it" data-k="tax" data-id="${t.id}"><input name="nome" value="${esc(t.nome)}" aria-label="Forma"><input class="val" name="taxa" inputmode="decimal" value="${pct(t.taxa)}" aria-label="Taxa %"><span>%</span><button class="ib bad" type="button" data-rmc aria-label="Remover">🗑</button></div>`).join('');
   const mq = cfgGet('maquininha', null), sel = $('#ipFaixa');
   if (sel && !sel.options.length) sel.innerHTML = Object.entries(INFINITEPAY).map(([k, v]) => `<option value="${k}">${esc(v.nome)}</option>`).join('');
   if (sel && mq && mq.faixa && document.activeElement !== sel) sel.value = mq.faixa;
   $('#ipInfo').textContent = mq ? `Tabela aplicada: InfinitePay – ${INFINITEPAY[mq.faixa]?.nome || mq.faixa}. Você pode editar qualquer taxa abaixo.` : 'A tabela da InfinitePay será aplicada na primeira sincronização.';
+  const ativo = document.activeElement;
+  if (ativo && ativo.closest && ativo.closest('#lstServ, #lstTax, #lstTat')) return;
+  $('#lstServ').innerHTML = viva('serv').sort((a, b) => (a.ord ?? 99) - (b.ord ?? 99)).map(s => `<div class="it" data-k="serv" data-id="${s.id}"><input name="nome" value="${esc(s.nome)}" aria-label="Nome"><input class="val" name="valor" inputmode="decimal" value="${nf(s.valor)}" aria-label="Valor padrão"><button class="ib bad" type="button" data-rmc aria-label="Remover">🗑</button></div>`).join('') || '<p class="vazio">Nenhum serviço.</p>';
+  $('#lstTax').innerHTML = formasOrd().map(t => `<div class="it" data-k="tax" data-id="${t.id}"><input name="nome" value="${esc(t.nome)}" aria-label="Forma"><input class="val" name="taxa" inputmode="decimal" value="${pct(t.taxa)}" aria-label="Taxa %"><span>%</span><button class="ib bad" type="button" data-rmc aria-label="Remover">🗑</button></div>`).join('');
   const tats = cfgGet('tatuadores', []);
   $('#lstTat').innerHTML = tats.length ? tats.map((t, i) => `<div class="it"><span style="flex:1">🧑‍🎨 ${esc(t)}</span><button class="ib bad" type="button" data-rmt="${i}" aria-label="Remover">🗑</button></div>`).join('') : '<p class="vazio">Nenhum tatuador cadastrado (opcional).</p>';
 }
@@ -710,7 +860,7 @@ function renderCfg() {
    ===================================================================== */
 function renderTudo(deSync) {
   if ($('#app').classList.contains('hid')) return;
-  renderAgenda(); renderFin(); renderCaixa(); renderCfg(); renderStatus();
+  renderAgenda(); renderFin(); renderCaixa(); renderFrigo(); renderCfg(); renderStatus();
   if (deSync && MODAL && MODAL.tipo === 'dia' && !$('#diaLst .conf')) abrirDia(MODAL.dia);
 }
 function montarApp() {
@@ -732,6 +882,7 @@ function montarApp() {
   document.addEventListener('click', e => {
     const t = e.target;
     if (t.closest('a.wa')) return;
+    if (t.closest('#t-frigo')) return;
     const novo = t.closest('[data-novo]'); if (novo) return abrirForm(null, novo.dataset.novo);
     if (t.closest('[data-ac="fechar"]')) return fecharModal();
     if (t.closest('[data-ac="fecharConf"]')) { t.closest('.confw').innerHTML = ''; return; }
@@ -759,7 +910,7 @@ function montarApp() {
   $('#btCsv').addEventListener('click', exportarCsv);
   // caixa
   $('#cxTipo').addEventListener('change', catsCx); catsCx();
-  opcoes($('#cxForma'), viva('tax').sort((x, y) => (x.ord ?? 99) - (y.ord ?? 99)).map(t => t.nome), 'Pix', '—');
+  opcoes($('#cxForma'), formasOrd().map(t => t.nome), 'Pix', '—');
   $('#cxData').value = hoje();
   ['#cxfAno', '#cxfMes'].forEach(s => $(s).addEventListener('change', renderCaixa));
   $('#cxCanc').addEventListener('click', limparCx);
@@ -780,6 +931,91 @@ function montarApp() {
     if (!confirm(`Saldo no dashboard: ${R(atual)}\nSaldo real: ${R(real)}\n\nLançar ajuste de ${R(dif)} hoje?`)) return;
     put('cx', { id: uid(), tipo: 'ajuste', data: hoje(), cat: 'Conferência de saldo', forma: '', desc: 'Ajuste de saldo (conferência)', valor: dif });
     $('#sdReal').value = ''; alterou(); toast('⚖️ Saldo ajustado');
+  });
+  // ---------- frigobar ----------
+  $('#frcData').value = hoje(); $('#frfData').value = hoje();
+  ['#frfAno', '#frfMes'].forEach(s => $(s).addEventListener('change', renderFrigo));
+  $('#t-frigo').addEventListener('click', e => {
+    const t = e.target;
+    const pb = t.closest('[data-fp]');
+    if (pb) {
+      const p = viva('fp').find(x => x.id === pb.dataset.fp); if (!p) return;
+      if (semPreco(p)) { toast(`Defina o preço de ${p.nome} em "Produtos e preços" (ou marque como grátis).`, 4000); return; }
+      CART[p.id] = (CART[p.id] || 0) + 1;
+      const q = estoques()[p.id] || 0;
+      if (p.controla && CART[p.id] > q) toast(`⚠️ ${p.nome}: o sistema mostra só ${q} em estoque.`);
+      return renderFrigo();
+    }
+    const cq = t.closest('[data-cq]'); if (cq) { const id = cq.dataset.cq; CART[id] = Math.max(0, (CART[id] || 0) + +cq.dataset.d); if (!CART[id]) delete CART[id]; return renderFrigo(); }
+    if (t.closest('#frLimpar')) { CART = {}; return renderFrigo(); }
+    if (t.closest('#frReg')) return registrarVenda();
+    const fmd = t.closest('[data-fmd]');
+    if (fmd) {
+      const m = viva('fm').find(x => x.id === fmd.dataset.fmd); if (!m) return;
+      if (confirm(`Excluir este movimento de ${br(m.data)}?${(m.itens || []).length ? '\n\nO estoque volta ao que era antes dele.' : ''}`)) { apagar('fm', m.id); alterou(); toast('Movimento excluído'); }
+      return;
+    }
+    const fpd = t.closest('[data-fpd]');
+    if (fpd) {
+      const p = viva('fp').find(x => x.id === fpd.dataset.fpd);
+      if (p && confirm(`Remover "${p.nome}" da lista? Os movimentos já lançados continuam no histórico.`)) { apagar('fp', p.id); delete CART[p.id]; fpd.blur(); alterou(); }
+    }
+  });
+  $('#frCart').addEventListener('change', e => { if (e.target.id === 'frForma') renderCarrinho(); });
+  $('#lstProd').addEventListener('change', e => {
+    const row = e.target.closest('.it[data-id]'); if (!row) return;
+    const p = viva('fp').find(x => x.id === row.dataset.id); if (!p) return;
+    const g = n => row.querySelector(`[name=${n}]`);
+    const nome = g('nome').value.trim(); if (!nome) return toast('O nome não pode ficar vazio.');
+    put('fp', { ...p, nome, preco: r2(num(g('preco').value)), custo: r2(num(g('custo').value)), min: Math.max(0, parseInt(g('min').value) || 0), gratis: g('gratis').checked, controla: g('controla').checked });
+    const estrutural = e.target.type === 'checkbox';
+    if (estrutural) e.target.blur();
+    DB.pend++; salvarDB(); agendarSync(); toast('💾 Salvo');
+    renderFrigo();
+  });
+  $('#fFrP').addEventListener('submit', e => {
+    e.preventDefault();
+    const nome = $('#npNome').value.trim(); if (!nome) return;
+    if (viva('fp').some(p => norm(p.nome) === norm(nome))) return toast('Esse produto já existe.');
+    const id = uid(), q = Math.max(0, parseInt($('#npQtd').value) || 0);
+    put('fp', { id, nome, preco: r2(num($('#npPreco').value)), custo: 0, min: 2, gratis: false, controla: true, ord: Math.max(0, ...viva('fp').map(p => p.ord ?? 0)) + 1 });
+    if (q) put('fm', { id: uid(), tipo: 'inicial', data: hoje(), hora: agoraHM(), desc: 'Estoque inicial', valor: 0, itens: [{ p: id, nome, q, v: 0 }] });
+    $('#npNome').value = $('#npPreco').value = $('#npQtd').value = ''; $('#npNome').blur(); alterou(); toast('➕ Produto cadastrado');
+  });
+  $('#fFrC').addEventListener('submit', e => {
+    e.preventDefault();
+    const er = $('#frcErro'); er.textContent = '';
+    const pid = $('#frcProd').value, q = parseInt($('#frcQtd').value) || 0, valor = r2(num($('#frcValor').value));
+    const p = viva('fp').find(x => x.id === pid);
+    if (!p) return er.textContent = 'Escolha o produto.';
+    if (q <= 0) return er.textContent = 'Informe a quantidade.';
+    if (valor < 0) return er.textContent = 'Valor inválido.';
+    put('fm', { id: uid(), tipo: 'compra', data: $('#frcData').value || hoje(), hora: agoraHM(), itens: [{ p: pid, nome: p.nome, q, v: q ? r2(valor / q) : 0 }], valor, desc: '' });
+    if (valor > 0) put('fp', { ...p, custo: r2(valor / q) });
+    $('#frcQtd').value = $('#frcValor').value = ''; alterou(); toast(`📦 +${q} ${p.nome}`);
+  });
+  $('#fraProd').addEventListener('change', infoAjuste); $('#fraTipo').addEventListener('change', infoAjuste);
+  $('#fFrA').addEventListener('submit', e => {
+    e.preventDefault();
+    const pid = $('#fraProd').value, p = viva('fp').find(x => x.id === pid); if (!p) return toast('Escolha o produto.');
+    const v = $('#fraQtd').value.trim(); if (v === '') return toast('Informe a quantidade.');
+    const n = Math.max(0, parseInt(v) || 0), atual = estoques()[pid] || 0;
+    if ($('#fraTipo').value === 'cont') {
+      const d = n - atual; if (!d) return toast('O estoque já está certo 👍');
+      if (!confirm(`${p.nome}: sistema ${atual}, contado ${n}.\nAjustar ${d > 0 ? '+' : ''}${d}?`)) return;
+      put('fm', { id: uid(), tipo: 'ajuste', data: hoje(), hora: agoraHM(), itens: [{ p: pid, nome: p.nome, q: d, v: 0 }], valor: 0, desc: 'Contagem' });
+    } else {
+      if (!n) return toast('Informe a quantidade perdida.');
+      put('fm', { id: uid(), tipo: 'perda', data: hoje(), hora: agoraHM(), itens: [{ p: pid, nome: p.nome, q: n, v: 0 }], valor: 0, desc: 'Perda / vencido / quebrado' });
+    }
+    $('#fraQtd').value = ''; alterou(); toast('⚖️ Estoque ajustado');
+  });
+  $('#fFrF').addEventListener('submit', e => {
+    e.preventDefault();
+    const er = $('#frfErro'); er.textContent = '';
+    const valor = r2(num($('#frfValor').value)); if (valor <= 0) return er.textContent = 'Informe um valor maior que zero.';
+    put('fm', { id: uid(), tipo: $('#frfTipo').value, data: $('#frfData').value || hoje(), hora: agoraHM(), itens: [], valor, desc: $('#frfDesc').value.trim() || ($('#frfTipo').value === 'saida' ? 'Saída' : 'Entrada') });
+    $('#frfDesc').value = $('#frfValor').value = ''; alterou(); toast('💾 Lançado no caixa do frigobar');
   });
   // valores e taxas
   const editCfg = e => {
@@ -821,7 +1057,7 @@ function montarApp() {
   const s = lerLS(K.sess);
   const vai = ok => {
     if (!ok) { mostrar('telaLogin'); return setTimeout(() => $('#lSenha').focus(), 50); }
-    if (!CFG || (CFG.enc && CFG.t == null)) return ok === 'migrar' ? mostrar('telaLogin') : irSetup();
+    if (!CFG || (CFG.enc && CFG.t == null)) return irSetup();
     TOKEN = CFG.local ? null : (CFG.t || null); entrar();
   };
   if (!SENHA) { mostrar('telaLogin'); $('#lErro').textContent = 'Senha não definida: confira o arquivo config.js no GitHub.'; return; }
