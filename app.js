@@ -1,6 +1,6 @@
 'use strict';
 /* =====================================================================
-   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 9)
+   STUDIO SAINT TATTOO – Agenda e Financeiro  (site versão 10)
    Tudo roda no GitHub:
    - o site fica no GitHub Pages (repositório público)
    - os dados ficam num arquivo JSON num repositório PRIVADO, gravado pela
@@ -8,7 +8,7 @@
    - sem internet, tudo fica salvo no aparelho e sincroniza depois
    - a senha de acesso fica no arquivo config.js
    ===================================================================== */
-const SITE_VERSAO = 9;
+const SITE_VERSAO = 10;
 const ARQ_DADOS = 'saint-tattoo-dados.json';
 const K = { cfg: 'sst_cfg', db: 'sst_db', sess: 'sst_sess', hide: 'sst_hide', tab: 'sst_tab', wa: 'sst_wa' };
 const COLS = ['ag', 'serv', 'tax', 'cx', 'cfg', 'fp', 'fm'];
@@ -437,7 +437,9 @@ function linhaAt(a, opt = {}) {
   const ses = a.sessao ? `<span class="et ses">Sessão ${esc(a.sessao)}${a.totalSessoes ? '/' + esc(a.totalSessoes) : ''}</span>` : '';
   const sin = num(a.sinal) > 0 && !fin ? `<span class="et sin">Sinal ${V(a.sinal)}</span>` : '';
   const st = `<span class="et st-${esc(a.status)}">${esc(a.status === 'Finalizado' ? 'Compareceu' : a.status)}</span>`;
-  const wa = a.tel ? ` <a class="wa" href="${telWa(a.tel)}" target="_blank" rel="noopener" title="WhatsApp">💬</a>` : '';
+  const wa = !a.tel ? '' : ST_ATIVOS.includes(a.status) && a.data >= hoje()
+    ? ` <button type="button" class="wab" data-lw="${a.id}" title="Enviar lembrete no WhatsApp" aria-label="Enviar lembrete no WhatsApp">💬</button>`
+    : ` <a class="wa" href="${telWa(a.tel)}" target="_blank" rel="noopener" title="Abrir conversa no WhatsApp">💬</a>`;
   let sub = `${esc(txtServ(a))}${a.tatuador ? ' · ' + esc(a.tatuador) : ''}`;
   if (fin) sub += ` · ✅ ${V(c.liquido)} líquido${a.forma && c.rest > 0 ? ' · ' + esc(a.forma) : ''}`;
   else if (fal && sinalRetido(a)) sub += ` · sinal retido ${V(c.sinalLiq)}`;
